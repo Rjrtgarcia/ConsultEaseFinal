@@ -43,7 +43,15 @@ class AdminDashboardWindow(BaseWindow):
         header_layout = QHBoxLayout()
         
         # Admin welcome label
-        admin_label = QLabel(f"Admin Dashboard - Logged in as: {self.admin.username if self.admin else 'Admin'}")
+        admin_username = "Admin"
+        if self.admin:
+            # Handle admin as either an object or a dictionary
+            if isinstance(self.admin, dict):
+                admin_username = self.admin.get('username', 'Admin')
+            else:
+                admin_username = getattr(self.admin, 'username', 'Admin')
+                
+        admin_label = QLabel(f"Admin Dashboard - Logged in as: {admin_username}")
         admin_label.setStyleSheet("font-size: 16pt; font-weight: bold;")
         header_layout.addWidget(admin_label)
         
