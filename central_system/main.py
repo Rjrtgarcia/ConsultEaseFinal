@@ -68,8 +68,12 @@ class ConsultEaseApp:
         logger.info(f"Applied {theme} theme stylesheet")
         
         # Install keyboard handler for touch input
-        self.keyboard_handler = install_keyboard_handler(self.app)
-        logger.info("Installed virtual keyboard handler")
+        try:
+            self.keyboard_handler = install_keyboard_handler(self.app)
+            logger.info("Installed virtual keyboard handler")
+        except Exception as e:
+            logger.error(f"Failed to install virtual keyboard handler: {e}")
+            self.keyboard_handler = None
         
         # Initialize database
         init_db()
@@ -155,7 +159,12 @@ class ConsultEaseApp:
         if self.admin_login_window:
             self.admin_login_window.hide()
         
+        if self.admin_dashboard_window:
+            self.admin_dashboard_window.hide()
+            
+        # Ensure proper display
         self.login_window.show()
+        self.login_window.showFullScreen()  # Force fullscreen again to ensure it takes effect
     
     def show_dashboard_window(self, student=None):
         """
@@ -197,8 +206,13 @@ class ConsultEaseApp:
         
         if self.dashboard_window:
             self.dashboard_window.hide()
+            
+        if self.admin_dashboard_window:
+            self.admin_dashboard_window.hide()
         
+        # Ensure proper display
         self.admin_login_window.show()
+        self.admin_login_window.showFullScreen()  # Force fullscreen
     
     def show_admin_dashboard_window(self, admin=None):
         """
@@ -219,7 +233,9 @@ class ConsultEaseApp:
         if self.admin_login_window:
             self.admin_login_window.hide()
         
+        # Ensure proper display
         self.admin_dashboard_window.show()
+        self.admin_dashboard_window.showFullScreen()  # Force fullscreen
     
     def handle_rfid_scan(self, student, rfid_uid):
         """
@@ -248,10 +264,26 @@ class ConsultEaseApp:
         Handle admin authentication event.
         
         Args:
-            credentials (dict): Admin credentials (id, username)
+            credentials (tuple): Admin credentials (username, password)
         """
-        logger.info(f"Admin authenticated: {credentials['username']}")
-        self.show_admin_dashboard_window(credentials)
+        # Unpack credentials from tuple
+        username, password = credentials
+        
+        # Authenticate admin
+        admin = self.admin_controller.authenticate(username, password)
+        
+        if admin:
+            logger.info(f"Admin authenticated: {username}")
+            # Create admin info to pass to dashboard
+            admin_info = {
+                'id': admin.id,
+                'username': admin.username
+            }
+            self.show_admin_dashboard_window(admin_info)
+        else:
+            logger.warning(f"Admin authentication failed: {username}")
+            if self.admin_login_window:
+                self.admin_login_window.show_login_error("Invalid username or password")
     
     def handle_consultation_request(self, faculty, message, course_code):
         """

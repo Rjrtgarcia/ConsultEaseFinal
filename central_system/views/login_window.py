@@ -23,10 +23,31 @@ class LoginWindow(BaseWindow):
         self.scanning_timer.timeout.connect(self.update_scanning_animation)
         self.scanning_animation_frame = 0
         
-        # For simulation during development
+        # For simulation during development - add to left side panel
+        self.left_panel = QFrame(self)
+        self.left_panel.setStyleSheet("background-color: #4a86e8;")
+        self.left_panel.setFixedWidth(250)
+        self.left_panel.move(0, 0)
+        
+        left_panel_layout = QVBoxLayout(self.left_panel)
+        left_panel_layout.setAlignment(Qt.AlignCenter)
+        
         self.simulate_button = QPushButton("Simulate RFID Scan")
+        self.simulate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #4a86e8;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #e6e6e6;
+            }
+        """)
         self.simulate_button.clicked.connect(self.simulate_rfid_scan)
-        self.layout().addWidget(self.simulate_button)
+        left_panel_layout.addWidget(self.simulate_button)
     
     def init_ui(self):
         """
@@ -34,36 +55,41 @@ class LoginWindow(BaseWindow):
         """
         # Set up main layout
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(50, 50, 50, 50)
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
-        # Header with logo and title
-        header_layout = QHBoxLayout()
+        # Create content widget with proper margin
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(50, 30, 50, 30)
+        content_layout.setSpacing(20)
         
-        # Logo placeholder
-        logo_label = QLabel()
-        logo_path = os.path.join(os.path.dirname(__file__), '..', '..', 'assets', 'logo.png')
-        if os.path.exists(logo_path):
-            logo_pixmap = QPixmap(logo_path)
-            logo_label.setPixmap(logo_pixmap.scaled(100, 100, Qt.KeepAspectRatio))
-        else:
-            logo_label.setText("Logo")
-            logo_label.setStyleSheet("font-size: 24pt; font-weight: bold;")
-        header_layout.addWidget(logo_label)
+        # Dark header background
+        header_frame = QFrame()
+        header_frame.setStyleSheet("background-color: #232323; color: white;")
+        header_layout = QVBoxLayout(header_frame)
+        header_layout.setContentsMargins(20, 20, 20, 20)
         
         # Title
         title_label = QLabel("ConsultEase")
-        title_label.setStyleSheet("font-size: 36pt; font-weight: bold;")
+        title_label.setStyleSheet("font-size: 36pt; font-weight: bold; color: white;")
         title_label.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(title_label, 1)
-        
-        main_layout.addLayout(header_layout)
+        header_layout.addWidget(title_label)
         
         # Instruction label
         instruction_label = QLabel("Please scan your RFID card to authenticate")
-        instruction_label.setStyleSheet("font-size: 18pt;")
+        instruction_label.setStyleSheet("font-size: 18pt; color: white;")
         instruction_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(instruction_label)
+        header_layout.addWidget(instruction_label)
+        
+        # Add header to main layout
+        main_layout.addWidget(header_frame, 0)
+        
+        # Content area - white background
+        content_frame = QFrame()
+        content_frame.setStyleSheet("background-color: #f5f5f5;")
+        content_frame_layout = QVBoxLayout(content_frame)
+        content_frame_layout.setContentsMargins(50, 50, 50, 50)
         
         # RFID scanning indicator
         self.scanning_frame = QFrame()
@@ -75,6 +101,8 @@ class LoginWindow(BaseWindow):
             }
         ''')
         scanning_layout = QVBoxLayout(self.scanning_frame)
+        scanning_layout.setContentsMargins(30, 30, 30, 30)
+        scanning_layout.setSpacing(20)
         
         self.scanning_status_label = QLabel("Ready to Scan")
         self.scanning_status_label.setStyleSheet("font-size: 20pt; color: #4a86e8;")
@@ -88,29 +116,55 @@ class LoginWindow(BaseWindow):
         self.rfid_icon_label.setAlignment(Qt.AlignCenter)
         scanning_layout.addWidget(self.rfid_icon_label)
         
-        main_layout.addWidget(self.scanning_frame, 1)
+        content_frame_layout.addWidget(self.scanning_frame, 1)
+        
+        # Add content to main layout
+        main_layout.addWidget(content_frame, 1)
+        
+        # Footer with admin login button
+        footer_frame = QFrame()
+        footer_frame.setStyleSheet("background-color: #232323;")
+        footer_frame.setFixedHeight(70)
+        footer_layout = QHBoxLayout(footer_frame)
         
         # Admin login button
         admin_button = QPushButton("Admin Login")
         admin_button.setStyleSheet('''
             QPushButton {
                 background-color: #808080;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                padding: 10px 20px;
                 max-width: 200px;
+            }
+            QPushButton:hover {
+                background-color: #909090;
             }
         ''')
         admin_button.clicked.connect(self.admin_login)
         
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        button_layout.addWidget(admin_button)
-        button_layout.addStretch()
+        footer_layout.addStretch()
+        footer_layout.addWidget(admin_button)
+        footer_layout.addStretch()
         
-        main_layout.addLayout(button_layout)
+        main_layout.addWidget(footer_frame, 0)
         
         # Set the main layout to a widget and make it the central widget
         central_widget = QWidget()
         central_widget.setLayout(main_layout)
         self.setCentralWidget(central_widget)
+    
+    def showEvent(self, event):
+        """Override showEvent to properly position side panel"""
+        super().showEvent(event)
+        self.left_panel.setFixedHeight(self.height())
+        
+    def resizeEvent(self, event):
+        """Handle window resize to adjust side panel"""
+        super().resizeEvent(event)
+        if hasattr(self, 'left_panel'):
+            self.left_panel.setFixedHeight(self.height())
     
     def start_rfid_scanning(self):
         """

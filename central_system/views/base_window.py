@@ -131,5 +131,5 @@ class BaseWindow(QMainWindow):
         """
         # Set window to fullscreen for better touch experience on Raspberry Pi
         # Uncomment this line when deploying on Raspberry Pi
-        # self.showFullScreen()
+        self.showFullScreen()
         super().showEvent(event) 
