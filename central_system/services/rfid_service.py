@@ -4,12 +4,13 @@ import time
 import os
 import sys
 import subprocess
+from PyQt5.QtCore import QObject, pyqtSignal
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class RFIDService:
+class RFIDService(QObject):
     """
     RFID Service for reading RFID cards via USB RFID reader.
     
@@ -18,8 +19,11 @@ class RFIDService:
     
     For Windows systems, a simulation mode is available for testing.
     """
+    # Signal to emit when a card is read
+    card_read_signal = pyqtSignal(str)
     
     def __init__(self):
+        super(RFIDService, self).__init__()
         self.os_platform = sys.platform
         self.device_path = os.environ.get('RFID_DEVICE_PATH', None)
         self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'false').lower() == 'true'
@@ -32,6 +36,9 @@ class RFIDService:
         self.callbacks = []
         self.running = False
         self.read_thread = None
+        
+        # Connect the signal to the notification method to ensure thread safety
+        self.card_read_signal.connect(self._notify_callbacks_safe)
         
         # Try to auto-detect RFID reader on initialization
         if not self.device_path and self.os_platform.startswith('linux'):
@@ -223,18 +230,28 @@ class RFIDService:
         self.callbacks.append(callback)
         logger.info(f"Registered RFID callback: {callback.__name__}")
     
-    def _notify_callbacks(self, rfid_uid):
+    def _notify_callbacks_safe(self, rfid_uid):
         """
-        Notify all registered callbacks with the RFID UID.
+        Thread-safe notification of callbacks via Qt signals.
         
         Args:
             rfid_uid (str): The RFID UID that was read
         """
         for callback in self.callbacks:
             try:
-                callback(rfid_uid)
+                callback(None, rfid_uid)  # Pass None for student as it hasn't been validated yet
             except Exception as e:
                 logger.error(f"Error in RFID callback: {str(e)}")
+    
+    def _notify_callbacks(self, rfid_uid):
+        """
+        Emit signal to notify callbacks in a thread-safe way.
+        
+        Args:
+            rfid_uid (str): The RFID UID that was read
+        """
+        # Use signal to ensure thread safety
+        self.card_read_signal.emit(rfid_uid)
     
     def _read_linux_rfid(self):
         """
@@ -311,6 +328,7 @@ class RFIDService:
                             elif event.code == evdev.ecodes.KEY_ENTER:
                                 if current_rfid:
                                     logger.info(f"RFID read: {current_rfid}")
+                                    # Use thread-safe notification
                                     self._notify_callbacks(current_rfid)
                                     current_rfid = ""
                             # If we get a character we don't recognize, log it for debugging

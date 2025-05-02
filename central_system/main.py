@@ -51,7 +51,7 @@ class ConsultEaseApp:
     Main application class for ConsultEase.
     """
     
-    def __init__(self):
+    def __init__(self, fullscreen=False):
         """
         Initialize the ConsultEase application.
         """
@@ -115,6 +115,9 @@ class ConsultEaseApp:
         
         # Show login window
         self.show_login_window()
+        
+        # Set fullscreen mode
+        self.app.setWindowState(self.app.windowState() | Qt.WindowFullScreen)
     
     def _get_theme_preference(self):
         """
@@ -370,19 +373,33 @@ class ConsultEaseApp:
             logger.warning(f"Unknown window: {window_name}")
 
 if __name__ == "__main__":
-    # Enable high DPI scaling
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
+    # Configure logging
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler("consultease.log")
+        ]
+    )
     
-    # Create and run application
-    app = ConsultEaseApp()
+    # Enable debug logging for RFID service
+    rfid_logger = logging.getLogger('central_system.services.rfid_service')
+    rfid_logger.setLevel(logging.DEBUG)
     
-    try:
-        exit_code = app.run()
-    except Exception as e:
-        logger.exception("Unhandled exception in main application")
-        exit_code = 1
-    finally:
-        app.cleanup()
+    # Set environment variables if needed
+    import os
     
-    sys.exit(exit_code) 
+    # Configure RFID - uncomment and modify if needed
+    # os.environ['RFID_DEVICE_PATH'] = '/dev/input/eventX'  # Replace X with actual device number
+    # os.environ['RFID_SIMULATION_MODE'] = 'true'  # Enable if no RFID reader available
+    
+    # Check if we're running in fullscreen mode
+    fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true'
+    
+    # Start the application
+    app = QApplication(sys.argv)
+    central_system = ConsultEaseApp(fullscreen=fullscreen)
+    central_system.start()
+    sys.exit(app.exec_()) 

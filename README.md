@@ -113,5 +113,48 @@ ConsultEase includes several features to enhance usability on touchscreen device
 
 See the user manual and deployment guide in the `docs/` directory for detailed instructions on touchscreen setup and optimization.
 
+## RFID Troubleshooting
+
+If you're experiencing issues with the RFID scanner, the following tools can help:
+
+### Automated RFID Fix (Raspberry Pi)
+
+Run the following command to automatically detect and configure your RFID reader:
+
+```bash
+sudo ./scripts/fix_rfid.sh
+```
+
+This script will:
+1. Detect connected USB devices
+2. List potential RFID readers
+3. Test the selected device
+4. Configure proper permissions
+5. Create udev rules for persistent configuration
+
+### Manual RFID Debugging
+
+For more granular control, use the debug_rfid.py tool:
+
+```bash
+# List all input devices and identify potential RFID readers
+python scripts/debug_rfid.py list
+
+# Monitor a specific input device to see raw events
+python scripts/debug_rfid.py monitor <device_number>
+
+# Test RFID reading functionality with a specific device
+python scripts/debug_rfid.py test <device_number>
+```
+
+### Common RFID Issues
+
+1. **Permission denied errors**: Run `sudo chmod -R a+r /dev/input/` to ensure proper permissions
+2. **Device not detected**: Ensure it's properly connected and check `lsusb` output
+3. **Wrong device selected**: Use the debug tool to identify the correct device
+4. **Thread-related crashes**: The latest update includes thread-safe implementations to prevent crashes
+
+For the target RFID reader with VID:ffff PID:0035, the system should auto-detect it during startup.
+
 ## License
 [MIT](LICENSE) 
