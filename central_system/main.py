@@ -4,6 +4,9 @@ import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import Qt
 
+# Add parent directory to path to help with imports
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -16,8 +19,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import models and controllers
-from models import init_db
-from controllers import (
+from central_system.models import init_db
+from central_system.controllers import (
     RFIDController,
     FacultyController,
     ConsultationController,
@@ -25,7 +28,7 @@ from controllers import (
 )
 
 # Import views
-from views import (
+from central_system.views import (
     LoginWindow,
     DashboardWindow,
     AdminLoginWindow,
@@ -33,7 +36,7 @@ from views import (
 )
 
 # Import utilities
-from utils import (
+from central_system.utils import (
     install_keyboard_handler, 
     apply_stylesheet,
     setup_default_icons
