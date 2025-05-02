@@ -1,6 +1,6 @@
 from .keyboard_handler import KeyboardHandler, install_keyboard_handler
 from .stylesheet import get_dark_stylesheet, get_light_stylesheet, apply_stylesheet
-from .icons import IconProvider, Icons, setup_default_icons
+from .icons import IconProvider, Icons, initialize as initialize_icons
 from .ui_components import (
     ModernButton, IconButton, FacultyCard, ModernSearchBox,
     NotificationBanner, LoadingOverlay
@@ -20,7 +20,7 @@ __all__ = [
     # Icons
     'IconProvider',
     'Icons',
-    'setup_default_icons',
+    'initialize_icons',
     
     # UI Components
     'ModernButton',

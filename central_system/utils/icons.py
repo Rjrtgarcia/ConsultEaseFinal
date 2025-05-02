@@ -16,6 +16,9 @@ ICONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 # Create icons directory if it doesn't exist
 os.makedirs(ICONS_DIR, exist_ok=True)
 
+# Flag to track initialization status
+_initialized = False
+
 class IconProvider:
     """
     Provider for accessing application icons.
@@ -39,6 +42,11 @@ class IconProvider:
         Returns:
             QIcon: The requested icon or a fallback if not found
         """
+        # Ensure icons are initialized
+        if not _initialized:
+            logger.warning("Icons not initialized, returning empty icon")
+            return QIcon()
+            
         # Check if icon is in cache
         cache_key = f"{name}_{size.width()}x{size.height()}" if size else name
         if cache_key in IconProvider._icon_cache:
@@ -176,6 +184,8 @@ def setup_default_icons():
     Generate basic default icons if they don't exist.
     This ensures the application has some basic icons available.
     """
+    global _initialized
+    
     # List of essential icons to create if missing
     essential_icons = [
         Icons.AVAILABLE,
@@ -216,6 +226,16 @@ def setup_default_icons():
                 logger.info(f"Created fallback icon for {icon_name}")
             except Exception as e:
                 logger.error(f"Failed to create fallback icon for {icon_name}: {e}")
+    
+    _initialized = True
+    logger.info("Icon system initialized")
 
-# Initialize the icons directory and default icons on import
-setup_default_icons() 
+def initialize():
+    """
+    Initialize the icon system.
+    Call this after QApplication is created.
+    """
+    setup_default_icons()
+
+# NOTE: No automatic initialization here.
+# You must call initialize() after creating QApplication 

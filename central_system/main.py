@@ -38,9 +38,10 @@ from central_system.views import (
 # Import utilities
 from central_system.utils import (
     install_keyboard_handler, 
-    apply_stylesheet,
-    setup_default_icons
+    apply_stylesheet
 )
+# Import icons module separately to avoid early QPixmap creation
+from central_system.utils import icons
 
 class ConsultEaseApp:
     """
@@ -57,9 +58,9 @@ class ConsultEaseApp:
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("ConsultEase")
         
-        # Set up icons and modern UI
-        setup_default_icons()
-        logger.info("Set up default icons")
+        # Set up icons and modern UI (after QApplication is created)
+        icons.initialize()
+        logger.info("Initialized icons")
         
         # Apply modern stylesheet (dark theme by default)
         theme = self._get_theme_preference()
