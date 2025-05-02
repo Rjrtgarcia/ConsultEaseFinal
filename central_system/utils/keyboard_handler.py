@@ -5,7 +5,8 @@ import signal
 import time
 import sys
 from PyQt5.QtCore import QObject, QEvent, Qt, QTimer
-from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit
+from PyQt5.QtWidgets import QApplication, QLineEdit, QTextEdit, QWidget
+from PyQt5.QtGui import QGuiApplication
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,9 @@ class KeyboardHandler(QObject):
         """
         super(KeyboardHandler, self).__init__(parent)
         
+        # Set environment variables to help keyboard detection
+        self._set_keyboard_environment()
+        
         # Detect available keyboard
         self.keyboard_type = self._detect_keyboard()
         self.keyboard_process = None
@@ -37,6 +41,12 @@ class KeyboardHandler(QObject):
         self.keyboard_timer.setSingleShot(True)
         self.keyboard_timer.timeout.connect(self._delayed_show_keyboard)
         
+        # Debug mode - more verbose logging
+        self.debug_mode = os.environ.get('CONSULTEASE_KEYBOARD_DEBUG', 'false').lower() == 'true'
+        
+        # Explicitly try to create keyboard once at startup
+        self._ensure_keyboard_service()
+        
         # Log detected keyboard
         if self.keyboard_type:
             keyboard_info = f"Initialized keyboard handler with keyboard type: {self.keyboard_type}"
@@ -45,6 +55,48 @@ class KeyboardHandler(QObject):
             keyboard_info = "No on-screen keyboard detected. Touch keyboard functionality will be disabled."
             
         logger.info(keyboard_info)
+    
+    def _set_keyboard_environment(self):
+        """Set environment variables to help with keyboard detection and usage"""
+        # Set environment variables to ensure keyboard backends work properly
+        # These can help squeekboard know when to appear
+        if sys.platform.startswith('linux'):
+            os.environ["GDK_BACKEND"] = "wayland,x11"
+            os.environ["QT_QPA_PLATFORM"] = "wayland;xcb"
+            # Force squeekboard to appear (used by the show_keyboard method)
+            os.environ["SQUEEKBOARD_FORCE"] = "1"
+            
+            # Check if we're running as root and warn if so
+            if os.geteuid() == 0:
+                logger.warning("Running as root may affect keyboard detection. Consider running as normal user.")
+    
+    def _ensure_keyboard_service(self):
+        """Ensure the keyboard service is running properly on system"""
+        if not sys.platform.startswith('linux'):
+            return
+            
+        if self.keyboard_type == 'squeekboard':
+            try:
+                # Check if squeekboard service is running
+                check_cmd = "systemctl --user is-active squeekboard.service"
+                result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+                
+                if "inactive" in result.stdout or "failed" in result.stdout:
+                    logger.info("Squeekboard service not running, attempting to start it...")
+                    start_cmd = "systemctl --user start squeekboard.service"
+                    subprocess.run(start_cmd, shell=True)
+                    
+                    # Check if it's now running
+                    result = subprocess.run(check_cmd, shell=True, capture_output=True, text=True)
+                    if "active" in result.stdout:
+                        logger.info("Squeekboard service started successfully")
+                    else:
+                        logger.warning("Failed to start squeekboard service, keyboard may not appear")
+                else:
+                    logger.info("Squeekboard service is already running")
+                    
+            except Exception as e:
+                logger.error(f"Error checking/starting squeekboard service: {e}")
     
     def _check_keyboard_availability(self):
         """Check if the detected keyboard can actually be launched"""
@@ -129,51 +181,138 @@ class KeyboardHandler(QObject):
         Returns:
             bool: True if the event was handled and should be filtered out
         """
+        # Check for explicit keyboardOnFocus property
+        should_show_keyboard = False
+        has_explicit_property = False
+        
+        if event.type() == QEvent.FocusIn:
+            # Check for explicit keyboard property
+            if hasattr(obj, 'property') and callable(getattr(obj, 'property')):
+                try:
+                    if obj.property("keyboardOnFocus"):
+                        has_explicit_property = True
+                        should_show_keyboard = True
+                        if self.debug_mode:
+                            logger.debug(f"Widget has explicit keyboardOnFocus property: {obj}")
+                except Exception as e:
+                    if self.debug_mode:
+                        logger.debug(f"Error checking keyboardOnFocus property: {e}")
+            
+            # Check standard input widgets
+            if isinstance(obj, QLineEdit) or isinstance(obj, QTextEdit):
+                should_show_keyboard = True
+                if self.debug_mode:
+                    logger.debug(f"Input widget received focus: {obj.__class__.__name__}")
+        
         # Handle focus in events for text input widgets
-        if event.type() == QEvent.FocusIn and (isinstance(obj, QLineEdit) or isinstance(obj, QTextEdit)):
+        if event.type() == QEvent.FocusIn and should_show_keyboard:
+            if self.debug_mode:
+                logger.debug(f"Focus in event for widget: {obj.__class__.__name__}")
+                
             self.current_focus_widget = obj
             # Delay keyboard showing slightly to avoid rapid show/hide cycles
             if not self.keyboard_timer.isActive() and not self.keyboard_visible:
-                self.keyboard_timer.start(300)  # 300ms delay
+                if self.debug_mode:
+                    logger.debug(f"Starting keyboard timer for widget: {obj.__class__.__name__}")
+                self.keyboard_timer.start(200)  # 200ms delay
+                
+                # For squeekboard, we need to manually trigger it
+                if self.keyboard_type == 'squeekboard':
+                    # Try dbus method first (more reliable)
+                    self._trigger_squeekboard_dbus()
 
         # Handle focus out events for text input widgets
         elif event.type() == QEvent.FocusOut and obj == self.current_focus_widget:
+            if self.debug_mode:
+                logger.debug(f"Focus out event for widget: {obj.__class__.__name__}")
+                
             # Get the new focus widget
             focus_widget = QApplication.focusWidget()
             
             # Only hide keyboard if focus is not moving to another text input
-            if not (isinstance(focus_widget, QLineEdit) or isinstance(focus_widget, QTextEdit)):
+            hide_keyboard = True
+            
+            if focus_widget:
+                # Check if the new widget should show keyboard
+                new_should_show = False
+                
+                # Check for explicit property
+                if hasattr(focus_widget, 'property') and callable(getattr(focus_widget, 'property')):
+                    try:
+                        if focus_widget.property("keyboardOnFocus"):
+                            new_should_show = True
+                    except:
+                        pass
+                
+                # Check if it's a standard input widget
+                if isinstance(focus_widget, QLineEdit) or isinstance(focus_widget, QTextEdit):
+                    new_should_show = True
+                
+                if new_should_show:
+                    hide_keyboard = False
+                    self.current_focus_widget = focus_widget
+                    if self.debug_mode:
+                        logger.debug(f"Focus moved to another input widget: {focus_widget.__class__.__name__}")
+            
+            if hide_keyboard:
+                if self.debug_mode:
+                    logger.debug("Hiding keyboard as focus moved to non-input widget")
                 self.hide_keyboard()
                 self.current_focus_widget = None
-                
-            # If moving to another text input, update the current focus widget
-            elif focus_widget != obj:
-                self.current_focus_widget = focus_widget
+        
+        # Detect clicks on the viewport which might be useful for keyboard control 
+        elif event.type() == QEvent.MouseButtonPress:
+            # Log for debug
+            if self.debug_mode:
+                if isinstance(obj, QWidget):
+                    logger.debug(f"Mouse press on widget: {obj.__class__.__name__}")
         
         # Pass the event along
         return super(KeyboardHandler, self).eventFilter(obj, event)
     
+    def _trigger_squeekboard_dbus(self):
+        """Attempt to show squeekboard via DBus (most reliable method on Linux)"""
+        if sys.platform.startswith('linux') and self.keyboard_type == 'squeekboard':
+            try:
+                # Try to use dbus-send to force the keyboard
+                cmd = [
+                    "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0", 
+                    "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:true"
+                ]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                logger.debug("Sent dbus command to show squeekboard")
+                return True
+            except Exception as e:
+                logger.debug(f"Error triggering squeekboard via dbus: {e}")
+                return False
+        return False
+    
     def _delayed_show_keyboard(self):
         """Show keyboard after a short delay to prevent flicker"""
         if self.current_focus_widget and self.current_focus_widget.isVisible():
+            if self.debug_mode:
+                logger.debug("Delayed keyboard show triggered")
             self.show_keyboard()
     
     def show_keyboard(self):
         """Show the appropriate virtual keyboard."""
         if not self.keyboard_type:
-            logger.debug("Cannot show keyboard - no supported keyboard installed")
+            if self.debug_mode:
+                logger.debug("Cannot show keyboard - no supported keyboard installed")
             return
             
         # Don't start another instance if already marked as visible
         if self.keyboard_visible:
-            logger.debug("Keyboard already visible")
+            if self.debug_mode:
+                logger.debug("Keyboard already visible")
             return
             
         # Check if process exists and is still running
         if self.keyboard_process:
             try:
                 if self.keyboard_process.poll() is None:
-                    logger.debug("Keyboard process still running")
+                    if self.debug_mode:
+                        logger.debug("Keyboard process still running")
                     self.keyboard_visible = True
                     return
             except Exception:
@@ -184,13 +323,16 @@ class KeyboardHandler(QObject):
             logger.info(f"Starting virtual keyboard: {self.keyboard_type}")
             
             if self.keyboard_type == 'squeekboard':
-                # Use more robust method to launch squeekboard
-                self.keyboard_process = subprocess.Popen(
-                    ['squeekboard'],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True  # Ensure it runs in its own session
-                )
+                # Try dbus method first (most reliable on Raspberry Pi OS)
+                if not self._trigger_squeekboard_dbus():
+                    # Use more robust method to launch squeekboard
+                    self.keyboard_process = subprocess.Popen(
+                        ['squeekboard'],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        env=dict(os.environ, SQUEEKBOARD_FORCE="1"),
+                        start_new_session=True  # Ensure it runs in its own session
+                    )
             elif self.keyboard_type == 'onboard':
                 # Onboard with more appropriate options for touch screens
                 self.keyboard_process = subprocess.Popen(
@@ -213,12 +355,28 @@ class KeyboardHandler(QObject):
     
     def hide_keyboard(self):
         """Hide the virtual keyboard."""
-        if not self.keyboard_visible or not self.keyboard_process:
+        if not self.keyboard_visible and not self.keyboard_process:
             return
+        
+        logger.info("Hiding virtual keyboard")
+        
+        # For squeekboard, try dbus method first
+        if self.keyboard_type == 'squeekboard':
+            try:
+                cmd = [
+                    "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0", 
+                    "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:false"
+                ]
+                subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.keyboard_visible = False
+                return
+            except Exception as e:
+                logger.debug(f"Error hiding squeekboard via dbus: {e}")
+                # Fall through to process termination
         
         try:
             # Check if process is still running
-            if self.keyboard_process.poll() is None:
+            if self.keyboard_process and self.keyboard_process.poll() is None:
                 # Try gentle termination first
                 self.keyboard_process.terminate()
                 

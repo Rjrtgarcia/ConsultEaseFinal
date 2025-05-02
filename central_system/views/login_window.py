@@ -280,4 +280,69 @@ class LoginWindow(BaseWindow):
         self.start_rfid_scanning()
         
         # Simulate processing delay
-        QTimer.singleShot(1500, lambda: self.handle_rfid_read("SIMULATED", None)) 
+        QTimer.singleShot(1500, lambda: self.handle_rfid_read("SIMULATED", None))
+
+# Create a script to ensure the keyboard works on Raspberry Pi
+def create_keyboard_setup_script():
+    """
+    Create a script to set up the virtual keyboard on the Raspberry Pi.
+    This should be called when deploying the application.
+    """
+    script_content = """#!/bin/bash
+# Setup script for ConsultEase virtual keyboard
+echo "Setting up ConsultEase virtual keyboard..."
+
+# Ensure squeekboard is installed
+if ! command -v squeekboard &> /dev/null; then
+    echo "Squeekboard not found, attempting to install..."
+    sudo apt update
+    sudo apt install -y squeekboard
+fi
+
+# Ensure squeekboard service is enabled
+systemctl --user enable squeekboard.service
+systemctl --user restart squeekboard.service
+
+# Set environment variables for proper keyboard operation
+cat > ~/.config/environment.d/consultease.conf << EOF
+# ConsultEase keyboard environment variables
+GDK_BACKEND=wayland,x11
+QT_QPA_PLATFORM=wayland;xcb
+SQUEEKBOARD_FORCE=1
+CONSULTEASE_KEYBOARD_DEBUG=true
+EOF
+
+echo "Creating keyboard trigger script..."
+cat > ~/keyboard-toggle.sh << EOF
+#!/bin/bash
+# Toggle squeekboard visibility
+if dbus-send --type=method_call --dest=sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0.GetVisible | grep -q "boolean true"; then
+    dbus-send --type=method_call --dest=sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0.SetVisible boolean:false
+    echo "Keyboard hidden"
+else
+    dbus-send --type=method_call --dest=sm.puri.OSK0 /sm/puri/OSK0 sm.puri.OSK0.SetVisible boolean:true
+    echo "Keyboard shown"
+fi
+EOF
+chmod +x ~/keyboard-toggle.sh
+
+echo "Setup complete! Reboot your system for changes to take effect."
+echo "If the keyboard still doesn't appear, run ~/keyboard-toggle.sh to manually show it"
+"""
+    
+    # Create scripts directory if it doesn't exist
+    script_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "scripts")
+    os.makedirs(script_dir, exist_ok=True)
+    
+    # Write the script
+    script_path = os.path.join(script_dir, "setup_keyboard.sh")
+    with open(script_path, "w") as f:
+        f.write(script_content)
+    
+    # Make the script executable on Unix
+    if os.name == "posix":
+        import stat
+        st = os.stat(script_path)
+        os.chmod(script_path, st.st_mode | stat.S_IEXEC)
+    
+    return script_path 

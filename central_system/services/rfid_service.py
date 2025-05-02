@@ -3,6 +3,7 @@ import threading
 import time
 import os
 import sys
+import subprocess
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -23,6 +24,10 @@ class RFIDService:
         self.device_path = os.environ.get('RFID_DEVICE_PATH', None)
         self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'false').lower() == 'true'
         
+        # Target RFID reader VID/PID
+        self.target_vid = "ffff"
+        self.target_pid = "0035"
+        
         # Events and callbacks
         self.callbacks = []
         self.running = False
@@ -30,9 +35,88 @@ class RFIDService:
         
         # Try to auto-detect RFID reader on initialization
         if not self.device_path and self.os_platform.startswith('linux'):
-            self._detect_rfid_device()
+            # First try to find the target device by VID/PID
+            if not self._find_device_by_vid_pid():
+                # If not found by VID/PID, try generic detection
+                self._detect_rfid_device()
             
         logger.info(f"RFID Service initialized (OS: {self.os_platform}, Simulation: {self.simulation_mode}, Device: {self.device_path})")
+    
+    def _find_device_by_vid_pid(self):
+        """
+        Find a USB device by VID/PID and determine its input device path.
+        """
+        try:
+            # Use lsusb to find the device
+            logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
+            lsusb_output = subprocess.check_output(['lsusb'], universal_newlines=True)
+            logger.info(f"Available USB devices:\n{lsusb_output}")
+            
+            # Look for our target device in lsusb output
+            target_line = None
+            for line in lsusb_output.split('\n'):
+                if f"ID {self.target_vid}:{self.target_pid}" in line:
+                    target_line = line
+                    logger.info(f"Found target USB device: {line}")
+                    break
+            
+            if not target_line:
+                logger.warning(f"USB device with VID:{self.target_vid} PID:{self.target_pid} not found")
+                return False
+                
+            # Attempt to find the corresponding input device
+            try:
+                import evdev
+                devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+                
+                # First try checking if any device's physical path contains the VID/PID
+                for device in devices:
+                    device_info = f"Device: {device.name} ({device.path})"
+                    try:
+                        phys = device.phys
+                        if phys and (self.target_vid in phys.lower() and self.target_pid in phys.lower()):
+                            logger.info(f"Found matching device by physical path: {device_info}")
+                            self.device_path = device.path
+                            return True
+                    except Exception as e:
+                        logger.debug(f"Error checking device physical path: {e}")
+                    
+                    # Also log all device info for debugging
+                    try:
+                        info = f" - phys: {device.phys}"
+                        if hasattr(device, 'info') and device.info:
+                            info += f" - info: {device.info}"
+                        logger.info(f"{device_info} {info}")
+                    except Exception:
+                        pass
+                
+                # If we haven't found it by physical path, try another approach
+                # Let's check if there's a device that looks like an HID keyboard
+                for device in devices:
+                    if (evdev.ecodes.EV_KEY in device.capabilities() and 
+                        len(device.capabilities().get(evdev.ecodes.EV_KEY, [])) > 10):
+                        
+                        # Check if this device behaves like a RFID reader
+                        # RFID readers typically don't have modifiers like shift/control
+                        key_caps = device.capabilities().get(evdev.ecodes.EV_KEY, [])
+                        has_numerics = any(k in key_caps for k in range(evdev.ecodes.KEY_0, evdev.ecodes.KEY_9 + 1))
+                        has_enter = evdev.ecodes.KEY_ENTER in key_caps
+                        
+                        if has_numerics and has_enter:
+                            logger.info(f"Found potential RFID reader: {device.name} ({device.path})")
+                            self.device_path = device.path
+                            return True
+                
+                logger.warning("No input device matching the target RFID reader found")
+                return False
+                
+            except ImportError:
+                logger.error("evdev library not installed. Please install it with: pip install evdev")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error finding device by VID/PID: {str(e)}")
+            return False
     
     def _detect_rfid_device(self):
         """
@@ -101,7 +185,7 @@ class RFIDService:
         
         # If we're not in simulation mode and on Linux, try one more time to detect the device
         if not self.simulation_mode and self.os_platform.startswith('linux') and not self.device_path:
-            if not self._detect_rfid_device():
+            if not self._find_device_by_vid_pid() and not self._detect_rfid_device():
                 logger.warning("No RFID device detected, falling back to simulation mode")
                 self.simulation_mode = True
         
@@ -170,7 +254,15 @@ class RFIDService:
             try:
                 # Open the device
                 device = evdev.InputDevice(self.device_path)
-                logger.info(f"Reading RFID from device: {device.name} ({self.device_path})")
+                logger.info(f"Reading RFID from device: {device.name} ({device.device_path if hasattr(device, 'device_path') else self.device_path})")
+                
+                # Let's take exclusive control of the device to prevent keyboard input in other apps
+                try:
+                    device.grab()
+                    logger.info("Grabbed exclusive access to the RFID reader")
+                except Exception as grab_err:
+                    logger.warning(f"Could not grab exclusive access to RFID reader: {grab_err}")
+                
             except Exception as e:
                 logger.error(f"Error opening RFID device {self.device_path}: {str(e)}")
                 logger.info("Falling back to simulation mode")
@@ -178,7 +270,7 @@ class RFIDService:
                 self._simulate_rfid_reading()
                 return
             
-            # Mapping from key codes to characters
+            # Mapping from key codes to characters (extend to support more characters)
             key_map = {
                 evdev.ecodes.KEY_0: "0", evdev.ecodes.KEY_1: "1",
                 evdev.ecodes.KEY_2: "2", evdev.ecodes.KEY_3: "3",
@@ -187,7 +279,8 @@ class RFIDService:
                 evdev.ecodes.KEY_8: "8", evdev.ecodes.KEY_9: "9",
                 evdev.ecodes.KEY_A: "A", evdev.ecodes.KEY_B: "B",
                 evdev.ecodes.KEY_C: "C", evdev.ecodes.KEY_D: "D",
-                evdev.ecodes.KEY_E: "E", evdev.ecodes.KEY_F: "F"
+                evdev.ecodes.KEY_E: "E", evdev.ecodes.KEY_F: "F",
+                # Add more key mappings if needed for your RFID cards
             }
             
             # Read input events
@@ -205,27 +298,59 @@ class RFIDService:
                         # Reset the RFID string if there's a pause between key events
                         current_time = time.time()
                         if current_time - last_event_time > 0.5 and current_rfid:
+                            logger.debug(f"Timeout reset for partial RFID: {current_rfid}")
                             current_rfid = ""
                         
                         last_event_time = current_time
                         
                         if event.type == evdev.ecodes.EV_KEY and event.value == 1:  # Key pressed
+                            logger.debug(f"Key event: {event.code}")
                             if event.code in key_map:
                                 current_rfid += key_map[event.code]
+                                logger.debug(f"Building RFID: {current_rfid}")
                             elif event.code == evdev.ecodes.KEY_ENTER:
                                 if current_rfid:
                                     logger.info(f"RFID read: {current_rfid}")
                                     self._notify_callbacks(current_rfid)
                                     current_rfid = ""
+                            # If we get a character we don't recognize, log it for debugging
+                            else:
+                                key_name = "UNKNOWN"
+                                for name, code in vars(evdev.ecodes).items():
+                                    if name.startswith('KEY_') and code == event.code:
+                                        key_name = name
+                                        break
+                                logger.debug(f"Unhandled key: {key_name} ({event.code})")
+                                
                 except OSError as e:
                     logger.error(f"Device read error (device may have been disconnected): {str(e)}")
                     # Try to reopen the device
                     try:
+                        # First try to ungrab if we had grabbed it
+                        try:
+                            device.ungrab()
+                        except:
+                            pass
+                            
                         device = evdev.InputDevice(self.device_path)
                         logger.info(f"Reconnected to RFID device: {device.name}")
+                        
+                        # Try to grab it again
+                        try:
+                            device.grab()
+                            logger.info("Regained exclusive access to RFID reader")
+                        except:
+                            pass
                     except Exception as e2:
                         logger.error(f"Failed to reopen device: {str(e2)}")
                         time.sleep(5)  # Wait before trying again
+            
+            # Make sure to ungrab the device when we're done
+            try:
+                device.ungrab()
+                logger.info("Released exclusive access to RFID reader")
+            except:
+                pass
         
         except ImportError:
             logger.error("evdev library not installed. Please install it with: pip install evdev")

@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QMainWindow, QDesktopWidget
 from PyQt5.QtCore import Qt, pyqtSignal
 import logging
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +123,28 @@ class BaseWindow(QMainWindow):
         # Handle ESC key to go back to main menu
         if event.key() == Qt.Key_Escape:
             self.change_window.emit('login', None)
+        # F5 key to toggle on-screen keyboard manually
+        elif event.key() == Qt.Key_F5:
+            self._toggle_keyboard()
         else:
             super().keyPressEvent(event)
+    
+    def _toggle_keyboard(self):
+        """
+        Toggle the on-screen keyboard manually.
+        Useful when automatic keyboard detection fails.
+        """
+        try:
+            import subprocess
+            if sys.platform.startswith('linux'):
+                # Try dbus method first (works with squeekboard)
+                subprocess.Popen([
+                    "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0", 
+                    "/sm/puri/OSK0", "sm.puri.OSK0.ToggleVisible"
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            logger.info("Toggled on-screen keyboard manually")
+        except Exception as e:
+            logger.error(f"Failed to toggle keyboard: {e}")
     
     def showEvent(self, event):
         """

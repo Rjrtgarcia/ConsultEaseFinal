@@ -35,6 +35,9 @@ from central_system.views import (
     AdminDashboardWindow
 )
 
+# Import the keyboard setup script generator
+from central_system.views.login_window import create_keyboard_setup_script
+
 # Import utilities
 from central_system.utils import (
     install_keyboard_handler, 
@@ -66,6 +69,13 @@ class ConsultEaseApp:
         theme = self._get_theme_preference()
         apply_stylesheet(self.app, theme)
         logger.info(f"Applied {theme} theme stylesheet")
+        
+        # Create keyboard setup script for Raspberry Pi
+        try:
+            script_path = create_keyboard_setup_script()
+            logger.info(f"Created keyboard setup script at {script_path}")
+        except Exception as e:
+            logger.error(f"Failed to create keyboard setup script: {e}")
         
         # Install keyboard handler for touch input
         try:
