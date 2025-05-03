@@ -1,7 +1,15 @@
-from PyQt5.QtWidgets import QMainWindow, QDesktopWidget
+from PyQt5.QtWidgets import QMainWindow, QDesktopWidget, QShortcut
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QKeySequence
 import logging
 import sys
+import os
+
+# Add parent directory to path to help with imports
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
+
+# Import utilities
+from central_system.utils import icons
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +23,25 @@ class BaseWindow(QMainWindow):
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        
+        # Basic window setup
+        self.setWindowTitle("ConsultEase")
+        self.setGeometry(100, 100, 1024, 768) # Default size
+        
+        # Set application icon (use helper from icons module)
+        app_icon = icons.get_icon("app_icon", "icons/consultease_logo.png")
+        if app_icon:
+            self.setWindowIcon(app_icon)
+            
+        # Initialize UI (must be called after basic setup)
         self.init_ui()
+        
+        # Add F11 shortcut to toggle fullscreen
+        self.fullscreen_shortcut = QShortcut(QKeySequence(Qt.Key_F11), self)
+        self.fullscreen_shortcut.activated.connect(self.toggle_fullscreen)
+        
+        # Store fullscreen state preference (will be set by ConsultEaseApp)
+        self.fullscreen = False
     
     def init_ui(self):
         """
@@ -23,7 +49,6 @@ class BaseWindow(QMainWindow):
         This method should be overridden by subclasses.
         """
         # Set window properties
-        self.setWindowTitle('ConsultEase')
         self.setMinimumSize(800, 480)  # Minimum size for Raspberry Pi 7" touchscreen
         self.apply_touch_friendly_style()
         
@@ -126,6 +151,9 @@ class BaseWindow(QMainWindow):
         # F5 key to toggle on-screen keyboard manually
         elif event.key() == Qt.Key_F5:
             self._toggle_keyboard()
+        # Let F11 handle fullscreen toggle via QShortcut
+        elif event.key() == Qt.Key_F11:
+            pass # Handled by self.fullscreen_shortcut
         else:
             super().keyPressEvent(event)
     
@@ -146,11 +174,29 @@ class BaseWindow(QMainWindow):
         except Exception as e:
             logger.error(f"Failed to toggle keyboard: {e}")
     
+    def toggle_fullscreen(self):
+        """
+        Toggle between fullscreen and normal window state.
+        """
+        if self.isFullScreen():
+            logger.info("Exiting fullscreen mode")
+            self.showNormal()
+            # Re-center after exiting fullscreen
+            self.center()
+        else:
+            logger.info("Entering fullscreen mode")
+            self.showFullScreen()
+
     def showEvent(self, event):
-        """
-        Called when the window is shown.
-        """
-        # Set window to fullscreen for better touch experience on Raspberry Pi
-        # Uncomment this line when deploying on Raspberry Pi
-        self.showFullScreen()
+        """Override showEvent to apply fullscreen if needed."""
+        # This ensures the window respects the initial fullscreen setting
+        # The `fullscreen` flag is set by ConsultEaseApp
+        if hasattr(self, 'fullscreen') and self.fullscreen:
+            if not self.isFullScreen(): # Avoid toggling if already fullscreen
+                self.showFullScreen()
+        # else:
+        #     # This part might prevent manual toggling out of fullscreen if initial state was fullscreen
+        #     # Let manual toggle handle exiting fullscreen
+        #     pass 
+                 
         super().showEvent(event) 
