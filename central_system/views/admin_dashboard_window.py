@@ -655,7 +655,67 @@ class StudentManagementTab(QWidget):
         
         if dialog.exec_() == QDialog.Accepted:
             rfid_uid = dialog.get_rfid_uid()
-            QMessageBox.information(self, "RFID Scan", f"RFID card scanned: {rfid_uid}")
+            if rfid_uid:
+                QMessageBox.information(self, "RFID Scan", f"RFID card scanned: {rfid_uid}")
+                
+                # Look up student by RFID
+                try:
+                    db = get_db()
+                    student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+                    
+                    if student:
+                        # Select the student in the table
+                        for row in range(self.student_table.rowCount()):
+                            if self.student_table.item(row, 3).text() == rfid_uid:
+                                self.student_table.selectRow(row)
+                                QMessageBox.information(
+                                    self, 
+                                    "Student Found", 
+                                    f"Student found: {student.name}\nDepartment: {student.department}"
+                                )
+                                break
+                    else:
+                        # No student with this RFID
+                        reply = QMessageBox.question(
+                            self,
+                            "Add New Student",
+                            f"No student found with RFID: {rfid_uid}\nWould you like to add a new student with this RFID?",
+                            QMessageBox.Yes | QMessageBox.No,
+                            QMessageBox.Yes
+                        )
+                        
+                        if reply == QMessageBox.Yes:
+                            # Pre-fill the RFID field in the student dialog
+                            dialog = StudentDialog()
+                            dialog.rfid_uid = rfid_uid
+                            dialog.rfid_input.setText(rfid_uid)
+                            
+                            if dialog.exec_() == QDialog.Accepted:
+                                try:
+                                    name = dialog.name_input.text().strip()
+                                    department = dialog.department_input.text().strip()
+                                    
+                                    # Create new student
+                                    new_student = Student(
+                                        name=name,
+                                        department=department,
+                                        rfid_uid=rfid_uid
+                                    )
+                                    
+                                    db.add(new_student)
+                                    db.commit()
+                                    
+                                    QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
+                                    self.refresh_data()
+                                    self.student_updated.emit()
+                                    
+                                except Exception as e:
+                                    logger.error(f"Error adding student: {str(e)}")
+                                    QMessageBox.warning(self, "Add Student", f"Error adding student: {str(e)}")
+                
+                except Exception as e:
+                    logger.error(f"Error looking up student by RFID: {str(e)}")
+                    QMessageBox.warning(self, "RFID Lookup Error", f"Error looking up student: {str(e)}")
 
 class StudentDialog(QDialog):
     """
@@ -667,7 +727,10 @@ class StudentDialog(QDialog):
         self.rfid_uid = ""
         self.rfid_service = get_rfid_service()
         self.init_ui()
-    
+        
+        # If we're in simulation mode, enable the simulate button
+        self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true'
+
     def init_ui(self):
         """
         Initialize the UI components.
@@ -763,6 +826,10 @@ class RFIDScanDialog(QDialog):
         super().__init__(parent)
         self.rfid_uid = ""
         self.rfid_service = rfid_service or get_rfid_service()
+        
+        # Track whether we've received a scan
+        self.scan_received = False
+        
         self.init_ui()
         
         # Register RFID callback
@@ -773,9 +840,11 @@ class RFIDScanDialog(QDialog):
         self.scanning_timer.timeout.connect(self.update_animation)
         self.scanning_timer.start(500)  # Update every 500ms
         
-        # For development, simulate a scan after 5 seconds if no real scan occurs
+        # For development, add a simulate button
         if os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true':
-            QTimer.singleShot(5000, self.simulate_scan)
+            self.simulate_button = QPushButton("Simulate Scan")
+            self.simulate_button.clicked.connect(self.simulate_scan)
+            self.layout().addWidget(self.simulate_button, alignment=Qt.AlignCenter)
     
     def init_ui(self):
         """
@@ -825,9 +894,11 @@ class RFIDScanDialog(QDialog):
         """
         Handle RFID scan event.
         """
-        if not rfid_uid:
+        # Ignore if no UID was provided or if we already received a scan
+        if not rfid_uid or self.scan_received:
             return
         
+        self.scan_received = True
         self.rfid_uid = rfid_uid
         
         # Update UI
@@ -852,9 +923,14 @@ class RFIDScanDialog(QDialog):
         """
         Simulate a successful RFID scan.
         """
+        # Disable the simulate button to prevent multiple clicks
+        if hasattr(self, 'simulate_button'):
+            self.simulate_button.setEnabled(False)
+        
         # Only simulate if no real scan has occurred yet
-        if not self.rfid_uid:
-            self.rfid_uid = self.rfid_service.simulate_card_read()
+        if not self.scan_received:
+            random_uid = self.rfid_service.simulate_card_read()
+            self.handle_rfid_scan(None, random_uid)
     
     def get_rfid_uid(self):
         """
