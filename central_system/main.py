@@ -391,15 +391,12 @@ if __name__ == "__main__":
     # Set environment variables if needed
     import os
     
-    # Configure RFID - uncomment and modify if needed
-    # os.environ['RFID_DEVICE_PATH'] = '/dev/input/eventX'  # Replace X with actual device number
-    # os.environ['RFID_SIMULATION_MODE'] = 'true'  # Enable if no RFID reader available
+    # Configure RFID - enable simulation mode since we're on Raspberry Pi
+    os.environ['RFID_SIMULATION_MODE'] = 'true'  # Enable if no RFID reader available
     
     # Check if we're running in fullscreen mode
     fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true'
     
     # Start the application
-    app = QApplication(sys.argv)
-    central_system = ConsultEaseApp(fullscreen=fullscreen)
-    central_system.start()
-    sys.exit(app.exec_()) 
+    app = ConsultEaseApp(fullscreen=fullscreen)
+    sys.exit(app.run()) 

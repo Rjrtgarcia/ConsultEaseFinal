@@ -31,23 +31,6 @@ class LoginWindow(BaseWindow):
         
         left_panel_layout = QVBoxLayout(self.left_panel)
         left_panel_layout.setAlignment(Qt.AlignCenter)
-        
-        self.simulate_button = QPushButton("Simulate RFID Scan")
-        self.simulate_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #4a86e8;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 5px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #e6e6e6;
-            }
-        """)
-        self.simulate_button.clicked.connect(self.simulate_rfid_scan)
-        left_panel_layout.addWidget(self.simulate_button)
     
     def init_ui(self):
         """
@@ -115,6 +98,25 @@ class LoginWindow(BaseWindow):
         self.rfid_icon_label.setStyleSheet("font-size: 48pt; color: #4a86e8;")
         self.rfid_icon_label.setAlignment(Qt.AlignCenter)
         scanning_layout.addWidget(self.rfid_icon_label)
+        
+        # Add the simulate button inside the scanning frame
+        self.simulate_button = QPushButton("Simulate RFID Scan")
+        self.simulate_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4a86e8;
+                color: #ffffff;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                font-weight: bold;
+                margin-top: 15px;
+            }
+            QPushButton:hover {
+                background-color: #3a76d8;
+            }
+        """)
+        self.simulate_button.clicked.connect(self.simulate_rfid_scan)
+        scanning_layout.addWidget(self.simulate_button)
         
         content_frame_layout.addWidget(self.scanning_frame, 1)
         
