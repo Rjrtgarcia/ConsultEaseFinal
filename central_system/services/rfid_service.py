@@ -297,24 +297,45 @@ class RFIDService(QObject):
                 evdev.ecodes.KEY_A: "A", evdev.ecodes.KEY_B: "B",
                 evdev.ecodes.KEY_C: "C", evdev.ecodes.KEY_D: "D",
                 evdev.ecodes.KEY_E: "E", evdev.ecodes.KEY_F: "F",
-                # Add more key mappings if needed for your RFID cards
+                # Add common special characters that might be used in 13.56 MHz cards
+                evdev.ecodes.KEY_MINUS: "-", evdev.ecodes.KEY_SPACE: " ",
+                evdev.ecodes.KEY_DOT: ".", evdev.ecodes.KEY_COMMA: ",",
+                evdev.ecodes.KEY_SEMICOLON: ";", evdev.ecodes.KEY_APOSTROPHE: "'",
+                # Add all digit and letter keys to be safe
+                evdev.ecodes.KEY_G: "G", evdev.ecodes.KEY_H: "H", 
+                evdev.ecodes.KEY_I: "I", evdev.ecodes.KEY_J: "J",
+                evdev.ecodes.KEY_K: "K", evdev.ecodes.KEY_L: "L",
+                evdev.ecodes.KEY_M: "M", evdev.ecodes.KEY_N: "N",
+                evdev.ecodes.KEY_O: "O", evdev.ecodes.KEY_P: "P",
+                evdev.ecodes.KEY_Q: "Q", evdev.ecodes.KEY_R: "R",
+                evdev.ecodes.KEY_S: "S", evdev.ecodes.KEY_T: "T",
+                evdev.ecodes.KEY_U: "U", evdev.ecodes.KEY_V: "V",
+                evdev.ecodes.KEY_W: "W", evdev.ecodes.KEY_X: "X",
+                evdev.ecodes.KEY_Y: "Y", evdev.ecodes.KEY_Z: "Z"
             }
             
             # Read input events
             current_rfid = ""
             last_event_time = 0
             
-            logger.info("RFID reader is active and waiting for cards")
+            logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")
             
             while self.running:
                 try:
+                    # Enhanced debugging - log all events for debugging
+                    logger.info("Waiting for RFID card events...")
+                    
                     for event in device.read_loop():
                         if not self.running:
                             break
                         
+                        # Enhanced logging for all events
+                        if event.type == evdev.ecodes.EV_KEY:
+                            logger.debug(f"RFID Key event: type={event.type}, code={event.code}, value={event.value}")
+                        
                         # Reset the RFID string if there's a pause between key events
                         current_time = time.time()
-                        if current_time - last_event_time > 0.5 and current_rfid:
+                        if current_time - last_event_time > 1.0 and current_rfid:
                             logger.debug(f"Timeout reset for partial RFID: {current_rfid}")
                             current_rfid = ""
                         
@@ -325,9 +346,10 @@ class RFIDService(QObject):
                             if event.code in key_map:
                                 current_rfid += key_map[event.code]
                                 logger.debug(f"Building RFID: {current_rfid}")
-                            elif event.code == evdev.ecodes.KEY_ENTER:
+                            # Handle Enter key to finalize RFID input
+                            elif event.code == evdev.ecodes.KEY_ENTER or event.code == evdev.ecodes.KEY_KPENTER:
                                 if current_rfid:
-                                    logger.info(f"RFID read: {current_rfid}")
+                                    logger.info(f"RFID read complete: {current_rfid}")
                                     # Use thread-safe notification
                                     self._notify_callbacks(current_rfid)
                                     current_rfid = ""
@@ -338,7 +360,7 @@ class RFIDService(QObject):
                                     if name.startswith('KEY_') and code == event.code:
                                         key_name = name
                                         break
-                                logger.debug(f"Unhandled key: {key_name} ({event.code})")
+                                logger.info(f"Unhandled key in RFID input: {key_name} ({event.code})")
                                 
                 except OSError as e:
                     logger.error(f"Device read error (device may have been disconnected): {str(e)}")
@@ -398,12 +420,22 @@ class RFIDService(QObject):
             rfid_uid (str, optional): RFID UID to simulate. If None, a random UID is generated.
         """
         if not rfid_uid:
-            # Generate a random RFID UID (8 characters hexadecimal)
+            # Generate a random RFID UID (10 characters hexadecimal - more like 13.56 MHz cards)
             import random
-            rfid_uid = ''.join(random.choices('0123456789ABCDEF', k=8))
+            rfid_uid = ''.join(random.choices('0123456789ABCDEF', k=10))
         
-        logger.info(f"Simulating RFID read: {rfid_uid}")
+        logger.info(f"Simulating RFID read (13.56 MHz format): {rfid_uid}")
+        
+        # Directly notify all callbacks
+        for callback in self.callbacks:
+            try:
+                callback(None, rfid_uid)
+            except Exception as e:
+                logger.error(f"Error in RFID callback during simulation: {str(e)}")
+        
+        # Also use the signal method as a backup
         self._notify_callbacks(rfid_uid)
+        
         return rfid_uid
 
 # Singleton instance

@@ -916,13 +916,13 @@ class RFIDScanDialog(QDialog):
         Initialize the UI components.
         """
         self.setWindowTitle("RFID Scan")
-        self.setFixedSize(300, 200)
+        self.setFixedSize(350, 350)  # Make dialog taller for manual input
         
         # Main layout
         layout = QVBoxLayout()
         
         # Instructions
-        instruction_label = QLabel("Please scan the RFID card...")
+        instruction_label = QLabel("Please scan the 13.56 MHz RFID card...")
         instruction_label.setAlignment(Qt.AlignCenter)
         instruction_label.setStyleSheet("font-size: 14pt;")
         layout.addWidget(instruction_label)
@@ -939,6 +939,25 @@ class RFIDScanDialog(QDialog):
         self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
         layout.addWidget(self.status_label)
         
+        # Add manual input section
+        manual_section = QGroupBox("Manual RFID Input")
+        manual_layout = QVBoxLayout()
+        
+        manual_instructions = QLabel("If scanning doesn't work, enter the RFID manually:")
+        manual_layout.addWidget(manual_instructions)
+        
+        self.manual_input = QLineEdit()
+        self.manual_input.setPlaceholderText("Enter RFID UID manually")
+        self.manual_input.returnPressed.connect(self.handle_manual_input)
+        manual_layout.addWidget(self.manual_input)
+        
+        manual_submit = QPushButton("Submit Manual RFID")
+        manual_submit.clicked.connect(self.handle_manual_input)
+        manual_layout.addWidget(manual_submit)
+        
+        manual_section.setLayout(manual_layout)
+        layout.addWidget(manual_section)
+        
         # Cancel button
         cancel_button = QPushButton("Cancel")
         cancel_button.clicked.connect(self.reject)
@@ -946,10 +965,33 @@ class RFIDScanDialog(QDialog):
         
         self.setLayout(layout)
     
+    def handle_manual_input(self):
+        """
+        Handle manual RFID input.
+        """
+        uid = self.manual_input.text().strip().upper()
+        if uid:
+            logger.info(f"Manual RFID input: {uid}")
+            self.manual_input.clear()
+            self.handle_rfid_scan(None, uid)
+        else:
+            self.status_label.setText("Please enter a valid RFID UID")
+            self.status_label.setStyleSheet("font-size: 12pt; color: #f44336;")
+            QTimer.singleShot(2000, lambda: self.reset_status_label())
+    
+    def reset_status_label(self):
+        """Reset the status label to its default state"""
+        if not self.scan_received:  # Only reset if we haven't received a scan
+            self.status_label.setText("Scanning...")
+            self.status_label.setStyleSheet("font-size: 12pt; color: #4a86e8;")
+    
     def update_animation(self):
         """
         Update the scanning animation.
         """
+        if self.scan_received:  # Don't update if we've received a scan
+            return
+            
         animations = ["🔄", "🔁", "🔃", "🔂"]
         current_index = animations.index(self.animation_label.text()) if self.animation_label.text() in animations else 0
         next_index = (current_index + 1) % len(animations)
@@ -986,7 +1028,7 @@ class RFIDScanDialog(QDialog):
         
         # Auto-accept after a delay
         QTimer.singleShot(1500, self.accept)
-        
+    
     def closeEvent(self, event):
         """Handle dialog close to clean up callback"""
         # Unregister callback to prevent memory leaks
