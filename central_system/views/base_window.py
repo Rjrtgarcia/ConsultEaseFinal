@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))))
 
 # Import utilities
-from central_system.utils import icons
+from central_system.utils.icons import IconProvider, Icons  # Import IconProvider and Icons
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +29,11 @@ class BaseWindow(QMainWindow):
         self.setGeometry(100, 100, 1024, 768) # Default size
         
         # Set application icon (use helper from icons module)
-        app_icon = icons.get_icon("app_icon", "icons/consultease_logo.png")
-        if app_icon:
+        app_icon = IconProvider.get_icon(Icons.APP_ICON if hasattr(Icons, 'APP_ICON') else "app", QSize(64, 64)) 
+        if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
+        else:
+            logger.warning("Could not load application icon.")
             
         # Initialize UI (must be called after basic setup)
         self.init_ui()
