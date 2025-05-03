@@ -729,11 +729,18 @@ class StudentDialog(QDialog):
         self.student_id = student_id
         self.rfid_uid = ""
         self.rfid_service = get_rfid_service()
+        
+        # Track if we're currently scanning
+        self.is_scanning = False
+        
+        # Store a reference to our scan callback
+        self.scan_callback = None
+        
         self.init_ui()
         
         # If we're in simulation mode, enable the simulate button
         self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'true').lower() == 'true'
-
+    
     def init_ui(self):
         """
         Initialize the UI components.
@@ -796,10 +803,62 @@ class StudentDialog(QDialog):
         """
         Scan RFID card.
         """
-        dialog = RFIDScanDialog(self.rfid_service)
-        if dialog.exec_() == QDialog.Accepted:
-            self.rfid_uid = dialog.get_rfid_uid()
-            self.rfid_input.setText(self.rfid_uid)
+        try:
+            logger.info("StudentDialog: Starting RFID scan")
+            
+            # Create our own RFID scan handler to receive directly from the service
+            def handle_scan(student=None, rfid_uid=None):
+                if not rfid_uid:
+                    return
+                    
+                logger.info(f"StudentDialog: RFID scan received: {rfid_uid}")
+                self.rfid_uid = rfid_uid
+                self.rfid_input.setText(self.rfid_uid)
+                
+                # If this was a simulation, trigger the animation to stop
+                if self.rfid_scan_dialog and self.rfid_scan_dialog.isVisible():
+                    self.rfid_scan_dialog.handle_rfid_scan(student, rfid_uid)
+            
+            # Store the callback reference to prevent garbage collection
+            self.scan_callback = handle_scan
+            
+            # Register our callback with the RFID service
+            self.rfid_service.register_callback(self.scan_callback)
+            self.is_scanning = True
+            
+            # Create and show the dialog
+            self.rfid_scan_dialog = RFIDScanDialog(self.rfid_service)
+            
+            # Wait for the dialog to complete
+            result = self.rfid_scan_dialog.exec_()
+            
+            # When the dialog completes, get the value
+            if result == QDialog.Accepted:
+                rfid_uid = self.rfid_scan_dialog.get_rfid_uid()
+                if rfid_uid:
+                    logger.info(f"StudentDialog: Dialog returned RFID: {rfid_uid}")
+                    self.rfid_uid = rfid_uid
+                    self.rfid_input.setText(self.rfid_uid)
+            
+            # Clean up our callback
+            if self.scan_callback in self.rfid_service.callbacks:
+                self.rfid_service.callbacks.remove(self.scan_callback)
+            self.is_scanning = False
+            
+        except Exception as e:
+            logger.error(f"Error in student RFID scan: {str(e)}")
+            QMessageBox.warning(self, "RFID Scan Error", f"An error occurred while scanning: {str(e)}")
+    
+    def closeEvent(self, event):
+        """Handle dialog close to clean up callback"""
+        # Clean up our callback if we're still scanning
+        if hasattr(self, 'scan_callback') and self.is_scanning:
+            try:
+                if self.scan_callback in self.rfid_service.callbacks:
+                    self.rfid_service.callbacks.remove(self.scan_callback)
+            except:
+                pass
+        super().closeEvent(event)
     
     def accept(self):
         """
@@ -809,7 +868,7 @@ class StudentDialog(QDialog):
         if not self.name_input.text().strip():
             QMessageBox.warning(self, "Validation Error", "Please enter a name.")
             return
-        
+            
         if not self.department_input.text().strip():
             QMessageBox.warning(self, "Validation Error", "Please enter a department.")
             return
@@ -965,16 +1024,33 @@ class RFIDScanDialog(QDialog):
         """
         Simulate a successful RFID scan.
         """
-        # Disable the simulate button to prevent multiple clicks
-        if hasattr(self, 'simulate_button'):
-            self.simulate_button.setEnabled(False)
-        
-        # Only simulate if no real scan has occurred yet
-        if not self.scan_received:
-            logger.info("Simulating RFID scan from RFIDScanDialog")
-            random_uid = self.rfid_service.simulate_card_read()
-            logger.info(f"Simulated RFID: {random_uid}")
-            self.handle_rfid_scan(None, random_uid)
+        try:
+            # Disable the simulate button to prevent multiple clicks
+            if hasattr(self, 'simulate_button'):
+                self.simulate_button.setEnabled(False)
+            
+            # Only simulate if no real scan has occurred yet
+            if not self.scan_received:
+                logger.info("Simulating RFID scan from RFIDScanDialog")
+                
+                # Generate a random RFID number
+                import random
+                random_uid = ''.join(random.choices('0123456789ABCDEF', k=8))
+                logger.info(f"Generated random RFID: {random_uid}")
+                
+                # Call the service's simulate method
+                self.rfid_service.simulate_card_read(random_uid)
+                
+                # Also directly call our handler in case the callback isn't working
+                self.handle_rfid_scan(None, random_uid)
+                
+                logger.info(f"Simulation complete, RFID: {random_uid}")
+        except Exception as e:
+            logger.error(f"Error in RFID simulation: {str(e)}")
+            self.status_label.setText(f"Simulation error: {str(e)}")
+            # Re-enable the button if there was an error
+            if hasattr(self, 'simulate_button'):
+                self.simulate_button.setEnabled(True)
     
     def get_rfid_uid(self):
         """
