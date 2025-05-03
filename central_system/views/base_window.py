@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QMainWindow, QDesktopWidget, QShortcut
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QKeySequence, QSize
 import logging
 import sys
 import os
