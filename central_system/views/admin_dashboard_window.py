@@ -23,6 +23,7 @@ class AdminDashboardWindow(BaseWindow):
     # Signals
     faculty_updated = pyqtSignal()
     student_updated = pyqtSignal()
+    change_window = pyqtSignal(str, object)  # Add explicit signal if it's missing
     
     def __init__(self, admin=None, parent=None):
         self.admin = admin
@@ -91,6 +92,8 @@ class AdminDashboardWindow(BaseWindow):
         """
         Handle logout button click.
         """
+        logger.info("Admin logging out")
+        self.hide()  # Immediately hide this window
         self.change_window.emit("admin_login", None)
     
     def handle_faculty_updated(self):
@@ -832,8 +835,11 @@ class RFIDScanDialog(QDialog):
         
         self.init_ui()
         
-        # Register RFID callback
-        self.rfid_service.register_callback(self.handle_rfid_scan)
+        # Add a direct callback reference to prevent garbage collection
+        self.callback_fn = self.handle_rfid_scan
+        
+        # Register RFID callback - ensure we're using the instance method
+        self.rfid_service.register_callback(self.callback_fn)
         
         # Start the scanning animation
         self.scanning_timer = QTimer(self)
@@ -894,8 +900,11 @@ class RFIDScanDialog(QDialog):
         """
         Handle RFID scan event.
         """
+        logger.info(f"RFIDScanDialog received scan: {rfid_uid}")
+        
         # Ignore if no UID was provided or if we already received a scan
         if not rfid_uid or self.scan_received:
+            logger.info(f"Ignoring scan - no UID or already received: {rfid_uid}")
             return
         
         self.scan_received = True
@@ -918,6 +927,39 @@ class RFIDScanDialog(QDialog):
         
         # Auto-accept after a delay
         QTimer.singleShot(1500, self.accept)
+        
+    def closeEvent(self, event):
+        """Handle dialog close to clean up callback"""
+        # Unregister callback to prevent memory leaks
+        if hasattr(self, 'callback_fn') and hasattr(self.rfid_service, 'callbacks'):
+            try:
+                if self.callback_fn in self.rfid_service.callbacks:
+                    self.rfid_service.callbacks.remove(self.callback_fn)
+            except:
+                pass  # Just in case there's any issue with removing
+        super().closeEvent(event)
+    
+    def reject(self):
+        """Override reject to clean up callback"""
+        # Unregister callback to prevent memory leaks
+        if hasattr(self, 'callback_fn') and hasattr(self.rfid_service, 'callbacks'):
+            try:
+                if self.callback_fn in self.rfid_service.callbacks:
+                    self.rfid_service.callbacks.remove(self.callback_fn)
+            except:
+                pass  # Just in case there's any issue with removing
+        super().reject()
+    
+    def accept(self):
+        """Override accept to clean up callback"""
+        # Unregister callback to prevent memory leaks
+        if hasattr(self, 'callback_fn') and hasattr(self.rfid_service, 'callbacks'):
+            try:
+                if self.callback_fn in self.rfid_service.callbacks:
+                    self.rfid_service.callbacks.remove(self.callback_fn)
+            except:
+                pass  # Just in case there's any issue with removing
+        super().accept()
     
     def simulate_scan(self):
         """
@@ -929,7 +971,9 @@ class RFIDScanDialog(QDialog):
         
         # Only simulate if no real scan has occurred yet
         if not self.scan_received:
+            logger.info("Simulating RFID scan from RFIDScanDialog")
             random_uid = self.rfid_service.simulate_card_read()
+            logger.info(f"Simulated RFID: {random_uid}")
             self.handle_rfid_scan(None, random_uid)
     
     def get_rfid_uid(self):
