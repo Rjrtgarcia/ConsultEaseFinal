@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                               QPushButton, QFrame, QMessageBox)
+                               QPushButton, QFrame, QMessageBox, QLineEdit)
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QPixmap, QIcon
 import os
@@ -23,14 +23,8 @@ class LoginWindow(BaseWindow):
         self.scanning_timer.timeout.connect(self.update_scanning_animation)
         self.scanning_animation_frame = 0
         
-        # For simulation during development - add to left side panel
-        self.left_panel = QFrame(self)
-        self.left_panel.setStyleSheet("background-color: #4a86e8;")
-        self.left_panel.setFixedWidth(250)
-        self.left_panel.move(0, 0)
-        
-        left_panel_layout = QVBoxLayout(self.left_panel)
-        left_panel_layout.setAlignment(Qt.AlignCenter)
+        # The left panel is no longer needed since we moved the simulate button
+        # to the scanning frame
     
     def init_ui(self):
         """
@@ -99,6 +93,45 @@ class LoginWindow(BaseWindow):
         self.rfid_icon_label.setAlignment(Qt.AlignCenter)
         scanning_layout.addWidget(self.rfid_icon_label)
         
+        # Add manual RFID input field
+        manual_input_layout = QHBoxLayout()
+        
+        self.rfid_input = QLineEdit()
+        self.rfid_input.setPlaceholderText("Enter RFID manually")
+        self.rfid_input.setStyleSheet("""
+            QLineEdit {
+                border: 1px solid #ccc;
+                border-radius: 5px;
+                padding: 8px;
+                font-size: 14pt;
+                background-color: #ffffff;
+            }
+            QLineEdit:focus {
+                border: 1px solid #4a86e8;
+            }
+        """)
+        self.rfid_input.returnPressed.connect(self.handle_manual_rfid_entry)
+        manual_input_layout.addWidget(self.rfid_input, 3)
+        
+        submit_button = QPushButton("Submit")
+        submit_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4a86e8;
+                color: #ffffff;
+                border: none;
+                padding: 8px 15px;
+                border-radius: 5px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #3a76d8;
+            }
+        """)
+        submit_button.clicked.connect(self.handle_manual_rfid_entry)
+        manual_input_layout.addWidget(submit_button, 1)
+        
+        scanning_layout.addLayout(manual_input_layout)
+        
         # Add the simulate button inside the scanning frame
         self.simulate_button = QPushButton("Simulate RFID Scan")
         self.simulate_button.setStyleSheet("""
@@ -158,15 +191,12 @@ class LoginWindow(BaseWindow):
         self.setCentralWidget(central_widget)
     
     def showEvent(self, event):
-        """Override showEvent to properly position side panel"""
+        """Override showEvent"""
         super().showEvent(event)
-        self.left_panel.setFixedHeight(self.height())
-        
+    
     def resizeEvent(self, event):
-        """Handle window resize to adjust side panel"""
+        """Handle window resize"""
         super().resizeEvent(event)
-        if hasattr(self, 'left_panel'):
-            self.left_panel.setFixedHeight(self.height())
     
     def start_rfid_scanning(self):
         """
@@ -283,6 +313,18 @@ class LoginWindow(BaseWindow):
         
         # Simulate processing delay
         QTimer.singleShot(1500, lambda: self.handle_rfid_read("SIMULATED", None))
+
+    def handle_manual_rfid_entry(self):
+        """
+        Handle manual RFID entry from the input field.
+        """
+        rfid_uid = self.rfid_input.text().strip()
+        if rfid_uid:
+            self.rfid_input.clear()
+            self.start_rfid_scanning()
+            
+            # Simulate processing delay
+            QTimer.singleShot(1000, lambda: self.handle_rfid_read(rfid_uid, None))
 
 # Create a script to ensure the keyboard works on Raspberry Pi
 def create_keyboard_setup_script():
