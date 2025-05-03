@@ -116,8 +116,8 @@ class ConsultEaseApp:
         # Show login window
         self.show_login_window()
         
-        # Set fullscreen mode
-        self.app.setWindowState(self.app.windowState() | Qt.WindowFullScreen)
+        # Store fullscreen preference for use in window creation
+        self.fullscreen = fullscreen
     
     def _get_theme_preference(self):
         """
