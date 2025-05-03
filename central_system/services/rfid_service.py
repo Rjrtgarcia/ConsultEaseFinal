@@ -233,15 +233,34 @@ class RFIDService(QObject):
     def _notify_callbacks_safe(self, rfid_uid):
         """
         Thread-safe notification of callbacks via Qt signals.
+        Also attempts to look up the student based on the RFID UID.
         
         Args:
             rfid_uid (str): The RFID UID that was read
         """
+        logger.info(f"RFID Service notifying callbacks for UID: {rfid_uid}")
+        
+        # Attempt to verify the student immediately
+        student = None
+        try:
+            from ..models import Student, get_db  # Lazy import to avoid circular dependencies
+            db = get_db()
+            student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+            if student:
+                logger.info(f"Student verified by RFIDService: {student.name}")
+            else:
+                logger.warning(f"No student found for RFID {rfid_uid} by RFIDService")
+        except Exception as e:
+            logger.error(f"Error verifying student in RFIDService: {str(e)}")
+            student = None  # Ensure student is None if lookup fails
+
+        # Notify all registered callbacks
         for callback in self.callbacks:
             try:
-                callback(None, rfid_uid)  # Pass None for student as it hasn't been validated yet
+                logger.info(f"Calling callback: {callback.__name__} with student: {student is not None}, rfid_uid: {rfid_uid}")
+                callback(student, rfid_uid)
             except Exception as e:
-                logger.error(f"Error in RFID callback: {str(e)}")
+                logger.error(f"Error in RFID callback {callback.__name__}: {str(e)}")
     
     def _notify_callbacks(self, rfid_uid):
         """
