@@ -5,28 +5,35 @@ import os
 import urllib.parse
 import getpass
 
-# Get current Linux username - this will match PostgreSQL's peer authentication
-current_user = getpass.getuser()
+# Database connection settings
+DB_TYPE = os.environ.get('DB_TYPE', 'sqlite')  # Default to SQLite for development
 
-# Database connection settings - should be moved to config in production
-# Using current Linux username for peer authentication
-DB_USER = os.environ.get('DB_USER', current_user)
-DB_PASSWORD = os.environ.get('DB_PASSWORD', '')  # Empty password for peer authentication
-DB_HOST = os.environ.get('DB_HOST', 'localhost')
-DB_PORT = os.environ.get('DB_PORT', '5432')  # Default PostgreSQL port
-DB_NAME = os.environ.get('DB_NAME', 'consultease')
-
-# Create PostgreSQL connection URL
-# For peer authentication on Unix systems
-if DB_HOST == 'localhost' and not DB_PASSWORD:
-    # Use Unix socket connection for peer authentication
-    DATABASE_URL = f"postgresql+psycopg2://{DB_USER}@/{DB_NAME}"
-    print(f"Connecting to database: {DB_NAME} as {DB_USER} using peer authentication")
+if DB_TYPE.lower() == 'sqlite':
+    # Use SQLite for development/testing
+    DB_PATH = os.environ.get('DB_PATH', 'consultease.db')
+    DATABASE_URL = f"sqlite:///{DB_PATH}"
+    print(f"Connecting to SQLite database: {DB_PATH}")
 else:
-    # Use TCP connection with password
-    encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
-    DATABASE_URL = f"postgresql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    print(f"Connecting to database: {DB_HOST}:{DB_PORT}/{DB_NAME} as {DB_USER}")
+    # Get current username - this will match PostgreSQL's peer authentication on Linux
+    current_user = getpass.getuser()
+
+    # PostgreSQL connection settings
+    DB_USER = os.environ.get('DB_USER', current_user)
+    DB_PASSWORD = os.environ.get('DB_PASSWORD', '')  # Empty password for peer authentication
+    DB_HOST = os.environ.get('DB_HOST', 'localhost')
+    DB_PORT = os.environ.get('DB_PORT', '5432')  # Default PostgreSQL port
+    DB_NAME = os.environ.get('DB_NAME', 'consultease')
+
+    # Create PostgreSQL connection URL
+    if DB_HOST == 'localhost' and not DB_PASSWORD:
+        # Use Unix socket connection for peer authentication
+        DATABASE_URL = f"postgresql+psycopg2://{DB_USER}@/{DB_NAME}"
+        print(f"Connecting to PostgreSQL database: {DB_NAME} as {DB_USER} using peer authentication")
+    else:
+        # Use TCP connection with password
+        encoded_password = urllib.parse.quote_plus(DB_PASSWORD)
+        DATABASE_URL = f"postgresql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        print(f"Connecting to PostgreSQL database: {DB_HOST}:{DB_PORT}/{DB_NAME} as {DB_USER}")
 
 engine = create_engine(DATABASE_URL)
 
@@ -48,6 +55,59 @@ def get_db():
 
 def init_db():
     """
-    Initialize database tables.
+    Initialize database tables and create default data if needed.
     """
-    Base.metadata.create_all(bind=engine) 
+    # Create tables
+    Base.metadata.create_all(bind=engine)
+
+    # Check if we need to create default data
+    db = SessionLocal()
+    try:
+        # Import models here to avoid circular imports
+        from .admin import Admin
+        from .faculty import Faculty
+
+        # Check if admin table is empty
+        admin_count = db.query(Admin).count()
+        if admin_count == 0:
+            # Create default admin with bcrypt hashed password
+            password_hash, salt = Admin.hash_password("admin123")
+            default_admin = Admin(
+                username="admin",
+                password_hash=password_hash,
+                salt=salt,
+                email="admin@consultease.com",
+                is_active=True
+            )
+            db.add(default_admin)
+            print("Created default admin user: admin / admin123")
+
+        # Check if faculty table is empty
+        faculty_count = db.query(Faculty).count()
+        if faculty_count == 0:
+            # Create some sample faculty
+            sample_faculty = [
+                Faculty(
+                    name="Dr. John Smith",
+                    department="Computer Science",
+                    email="john.smith@university.edu",
+                    ble_id="11:22:33:44:55:66",
+                    status=False
+                ),
+                Faculty(
+                    name="Dr. Jane Doe",
+                    department="Mathematics",
+                    email="jane.doe@university.edu",
+                    ble_id="AA:BB:CC:DD:EE:FF",
+                    status=False
+                )
+            ]
+            db.add_all(sample_faculty)
+            print("Created sample faculty data")
+
+        db.commit()
+    except Exception as e:
+        print(f"Error creating default data: {str(e)}")
+        db.rollback()
+    finally:
+        db.close()

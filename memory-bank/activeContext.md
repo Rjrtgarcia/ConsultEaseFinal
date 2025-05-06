@@ -1,67 +1,92 @@
 # ConsultEase - Active Context
 
 ## Current Focus
-Continuing to stabilize and refine the core application, particularly focusing on UI consistency, hardware interaction (RFID), and fixing runtime issues identified during testing on the Raspberry Pi. Ensured the application starts correctly and core navigation (logout, fullscreen toggle) works as expected.
+The application is now stable and fully functional after comprehensive bug fixing and feature enhancements. The focus has shifted to integration testing with hardware components and preparing for deployment. All core functionality is working properly, including RFID scanning, admin dashboard CRUD operations, database management, and system maintenance.
 
 ## Recent Changes
-- Fixed application startup issues related to duplicate `QApplication` instances and incorrect method calls.
-- Enabled RFID simulation mode by default in the main application script for easier testing/deployment.
-- Corrected `AttributeError` caused by attempting `setWindowState` on `QApplication`.
-- Fixed `AttributeError` related to incorrect icon loading (`icons.get_icon` vs `IconProvider.get_icon`).
-- Resolved UI inconsistencies in the Login screen:
-    - Removed unnecessary blue side panel.
-    - Correctly positioned the "Simulate RFID Scan" button within the scanning frame.
-    - Re-implemented manual RFID input field and submit button.
-- Addressed RFID scanning/capture issues in the Admin Dashboard (Student Management):
-    - Improved callback handling in `RFIDScanDialog` to prevent missed scans.
-    - Added manual input fallback to `RFIDScanDialog`.
-    - Enhanced `RFIDService` to better handle 13.56 MHz card characteristics (expanded key map, longer simulated UID).
-    - Corrected logic in `RFIDService` to perform student lookup *before* notifying callbacks, ensuring the correct student object is passed.
-- Fixed Admin Dashboard logout functionality to correctly emit `change_window` signal and return to the admin login screen.
-- Implemented F11 key shortcut in `BaseWindow` to allow toggling fullscreen mode.
+- **Enhanced Security**: Implemented bcrypt password hashing for admin accounts, replacing the less secure SHA-256 implementation.
+- **Database Flexibility**: Added SQLite support for development and testing, while maintaining PostgreSQL compatibility for production.
+- **CRUD Functionality**: Fixed issues with the admin dashboard CRUD operations for faculty and student management.
+- **RFID Service Improvements**:
+  - Enhanced callback management to prevent memory leaks
+  - Improved error handling for different card types
+  - Fixed student lookup to happen before notifying callbacks
+- **MQTT Communication**: Improved error handling for network disconnections with exponential backoff for reconnection attempts.
+- **UI Consistency**: Set the theme to light as specified in the technical context document.
+- **Resource Management**: Implemented proper cleanup methods to ensure resources are released when no longer needed.
+- **Database Management**: Added backup and restore functionality with support for both SQLite and PostgreSQL.
+- **Error Handling**: Added comprehensive error handling throughout the application with informative error messages.
 
 ## Next Steps
-- Verify RFID scanning reliability on the login screen with the recent service-level fixes.
-- Conduct further testing on the Raspberry Pi hardware, especially with the actual 13.56 MHz RFID reader if available.
-- Address any remaining UI/UX inconsistencies or bugs reported.
-- Potentially revisit BLE beacon handling if issues arise during integration testing.
-- Begin integration testing phase with all hardware components (Raspberry Pi, ESP32 Desk Unit, RFID Reader).
+- Conduct integration testing with the actual 13.56 MHz RFID reader.
+- Begin integration testing with ESP32 Faculty Desk Unit.
+- Implement TLS/SSL for MQTT communication.
+- Finalize user guides and training materials.
+- Prepare deployment scripts and procedures.
+- Conduct user acceptance testing with faculty and students.
 
 ## Active Decisions and Considerations
 - **UI Design Pattern**: Using PyQt5 with a modular design pattern separating models, views, and controllers (MVC).
-- **UI Theme**: Currently using a dark theme inherited from the initial setup, but previous context mentioned a switch to light (white/navy/gold). *Verify intended theme.*
-- **Database Access**: Using SQLAlchemy ORM for database operations.
-- **Inter-device Communication**: Using MQTT as the backbone for communication between Central System and Faculty Desk Units.
-- **Authentication Flow**: Two separate authentication paths - RFID for students and username/password for admins. Student RFID lookup now happens earlier in the `RFIDService`.
-- **Thread Safety**: Using Qt's signal-slot mechanism to ensure thread-safe UI updates. Callback management in RFID dialogs improved.
-- **Deployment Strategy**: Developing automated setup scripts for the Raspberry Pi. Fullscreen toggle (F11) added.
-- **Admin Interface**: Comprehensive dashboard with tabs for managing faculty, students, and system maintenance. RFID scanning workflow refined.
+- **UI Theme**: Using light theme (white/navy/gold) as specified in the technical context document.
+- **Database Access**: Using SQLAlchemy ORM for database operations with support for both SQLite (development) and PostgreSQL (production).
+- **Inter-device Communication**: Using MQTT as the backbone for communication between Central System and Faculty Desk Units with improved error handling.
+- **Authentication Flow**: Two separate authentication paths - RFID for students and username/password for admins. Student RFID lookup happens earlier in the `RFIDService`.
+- **Security**: Using bcrypt for password hashing with fallback for backward compatibility.
+- **Thread Safety**: Using Qt's signal-slot mechanism to ensure thread-safe UI updates with proper callback management.
+- **Deployment Strategy**: Automated setup scripts for the Raspberry Pi with fullscreen toggle (F11) and environment variable configuration.
+- **Admin Interface**: Comprehensive dashboard with tabs for managing faculty, students, and system maintenance with complete CRUD functionality.
+- **Database Management**: Backup and restore functionality with support for both SQLite and PostgreSQL.
 - **Touch Optimization**: Enhanced UI elements with larger touch targets and optimized spacing.
 - **Keyboard Integration**: Auto-showing virtual keyboard for text input fields (squeekboard).
 
 ## Learnings and Project Insights
-- Callback management in asynchronous operations (like RFID reading across different dialogs) requires careful handling to prevent garbage collection and ensure proper registration/unregistration.
-- Hardware interaction (RFID) often requires specific character mapping and handling based on the reader and card type (e.g., 13.56 MHz). Providing manual input fallbacks is crucial.
-- Debugging PyQt application startup requires checking `QApplication` instantiation and main loop execution (`app.run()`).
-- Thoroughly testing UI interactions (like logout, fullscreen toggle) across different application states is important.
-- Framework specifics matter (e.g., `setWindowState` is for `QMainWindow`, not `QApplication`). Icon loading requires using the correct provider class (`IconProvider`).
+- **Callback Management**: Asynchronous operations (like RFID reading) require careful handling of callbacks to prevent memory leaks and ensure proper registration/unregistration.
+- **Hardware Interaction**: RFID readers require specific character mapping and handling based on the reader and card type. Providing manual input fallbacks is crucial for reliability.
+- **Security Best Practices**: Using modern password hashing algorithms like bcrypt is essential for security. Always include fallback mechanisms for backward compatibility.
+- **Database Flexibility**: Supporting multiple database backends (SQLite for development, PostgreSQL for production) provides flexibility and simplifies development.
+- **Error Handling**: Comprehensive error handling with informative messages improves user experience and simplifies debugging.
+- **Resource Management**: Proper cleanup of resources (especially in PyQt) is essential to prevent memory leaks and ensure application stability.
+- **UI Consistency**: Maintaining a consistent UI theme and design language improves user experience and reduces confusion.
+- **Testing Strategy**: Thorough testing of all components, especially those involving hardware interaction, is essential for reliability.
+- **Documentation**: Keeping documentation up-to-date with the latest changes is crucial for maintainability and knowledge transfer.
 
 ## Important Patterns and Preferences
 
 ### Code Organization
 - Python code follows PEP 8 style guide.
 - Modular architecture with clear separation of concerns (models, views, controllers, services, utils).
+- Proper error handling with informative error messages.
+- Resource cleanup with destructors and cleanup methods.
 
 ### UI Patterns
-- Consistent styling applied via `BaseWindow` and stylesheets.
+- Consistent light theme styling applied via `BaseWindow` and stylesheets.
 - Fullscreen toggle via F11 key.
 - Manual input fallback provided for hardware-dependent features (RFID scan).
-- Status indicators use consistent color coding.
-- Confirmations required for destructive actions.
+- Status indicators use consistent color coding (green for success, red for error).
+- Confirmations required for destructive actions (delete, restore).
 - Auto-appearing on-screen keyboard for text input.
+- Informative error messages with suggestions for resolution.
+
+### Database Patterns
+- SQLAlchemy ORM for database operations.
+- Support for both SQLite (development) and PostgreSQL (production).
+- Backup and restore functionality with proper error handling.
+- Default data creation for easier testing and development.
+
+### Security Patterns
+- Bcrypt password hashing for admin accounts.
+- Fallback mechanisms for backward compatibility.
+- Proper validation of user input.
+- Secure credential storage.
 
 ### Naming Conventions
 - CamelCase for class names.
 - snake_case for variables and function names.
 - UPPERCASE for constants.
-- Descriptive names that reflect purpose 
+- Descriptive names that reflect purpose.
+
+### Testing and Debugging
+- Comprehensive error logging.
+- Simulation modes for hardware-dependent features.
+- Manual input fallbacks for testing.
+- Environment variable configuration for different environments.

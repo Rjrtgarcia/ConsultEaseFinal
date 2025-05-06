@@ -13,42 +13,42 @@ logger = logging.getLogger(__name__)
 class RFIDService(QObject):
     """
     RFID Service for reading RFID cards via USB RFID reader.
-    
-    This service uses evdev to read input from a USB RFID reader 
+
+    This service uses evdev to read input from a USB RFID reader
     which typically behaves like a keyboard.
-    
+
     For Windows systems, a simulation mode is available for testing.
     """
     # Signal to emit when a card is read
     card_read_signal = pyqtSignal(str)
-    
+
     def __init__(self):
         super(RFIDService, self).__init__()
         self.os_platform = sys.platform
         self.device_path = os.environ.get('RFID_DEVICE_PATH', None)
         self.simulation_mode = os.environ.get('RFID_SIMULATION_MODE', 'false').lower() == 'true'
-        
+
         # Target RFID reader VID/PID
         self.target_vid = "ffff"
         self.target_pid = "0035"
-        
+
         # Events and callbacks
         self.callbacks = []
         self.running = False
         self.read_thread = None
-        
+
         # Connect the signal to the notification method to ensure thread safety
         self.card_read_signal.connect(self._notify_callbacks_safe)
-        
+
         # Try to auto-detect RFID reader on initialization
         if not self.device_path and self.os_platform.startswith('linux'):
             # First try to find the target device by VID/PID
             if not self._find_device_by_vid_pid():
                 # If not found by VID/PID, try generic detection
                 self._detect_rfid_device()
-            
+
         logger.info(f"RFID Service initialized (OS: {self.os_platform}, Simulation: {self.simulation_mode}, Device: {self.device_path})")
-    
+
     def _find_device_by_vid_pid(self):
         """
         Find a USB device by VID/PID and determine its input device path.
@@ -58,7 +58,7 @@ class RFIDService(QObject):
             logger.info(f"Looking for USB device with VID:{self.target_vid} PID:{self.target_pid}")
             lsusb_output = subprocess.check_output(['lsusb'], universal_newlines=True)
             logger.info(f"Available USB devices:\n{lsusb_output}")
-            
+
             # Look for our target device in lsusb output
             target_line = None
             for line in lsusb_output.split('\n'):
@@ -66,16 +66,16 @@ class RFIDService(QObject):
                     target_line = line
                     logger.info(f"Found target USB device: {line}")
                     break
-            
+
             if not target_line:
                 logger.warning(f"USB device with VID:{self.target_vid} PID:{self.target_pid} not found")
                 return False
-                
+
             # Attempt to find the corresponding input device
             try:
                 import evdev
                 devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-                
+
                 # First try checking if any device's physical path contains the VID/PID
                 for device in devices:
                     device_info = f"Device: {device.name} ({device.path})"
@@ -87,7 +87,7 @@ class RFIDService(QObject):
                             return True
                     except Exception as e:
                         logger.debug(f"Error checking device physical path: {e}")
-                    
+
                     # Also log all device info for debugging
                     try:
                         info = f" - phys: {device.phys}"
@@ -96,35 +96,35 @@ class RFIDService(QObject):
                         logger.info(f"{device_info} {info}")
                     except Exception:
                         pass
-                
+
                 # If we haven't found it by physical path, try another approach
                 # Let's check if there's a device that looks like an HID keyboard
                 for device in devices:
-                    if (evdev.ecodes.EV_KEY in device.capabilities() and 
+                    if (evdev.ecodes.EV_KEY in device.capabilities() and
                         len(device.capabilities().get(evdev.ecodes.EV_KEY, [])) > 10):
-                        
+
                         # Check if this device behaves like a RFID reader
                         # RFID readers typically don't have modifiers like shift/control
                         key_caps = device.capabilities().get(evdev.ecodes.EV_KEY, [])
                         has_numerics = any(k in key_caps for k in range(evdev.ecodes.KEY_0, evdev.ecodes.KEY_9 + 1))
                         has_enter = evdev.ecodes.KEY_ENTER in key_caps
-                        
+
                         if has_numerics and has_enter:
                             logger.info(f"Found potential RFID reader: {device.name} ({device.path})")
                             self.device_path = device.path
                             return True
-                
+
                 logger.warning("No input device matching the target RFID reader found")
                 return False
-                
+
             except ImportError:
                 logger.error("evdev library not installed. Please install it with: pip install evdev")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error finding device by VID/PID: {str(e)}")
             return False
-    
+
     def _detect_rfid_device(self):
         """
         Auto-detect RFID device on Linux systems.
@@ -132,13 +132,13 @@ class RFIDService(QObject):
         try:
             import evdev
             devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-            
+
             # Check all input devices
             for device in devices:
                 # Log available devices to help debug
                 device_info = f"Found input device: {device.name} ({device.path})"
                 capabilities = []
-                
+
                 # Check device capabilities
                 if evdev.ecodes.EV_KEY in device.capabilities():
                     capabilities.append("Keyboard")
@@ -146,16 +146,16 @@ class RFIDService(QObject):
                     capabilities.append("Touchscreen/Pad")
                 if evdev.ecodes.EV_REL in device.capabilities():
                     capabilities.append("Mouse/Pointer")
-                    
+
                 device_info += f" - Capabilities: {', '.join(capabilities)}"
                 logger.info(device_info)
-                
+
                 # Look for devices that might be RFID readers
                 # Many RFID readers present as HID keyboard devices
                 if (
-                    "rfid" in device.name.lower() or 
-                    "card" in device.name.lower() or 
-                    "reader" in device.name.lower() or 
+                    "rfid" in device.name.lower() or
+                    "card" in device.name.lower() or
+                    "reader" in device.name.lower() or
                     "hid" in device.name.lower() or
                     "usb" in device.name.lower()
                 ):
@@ -164,22 +164,22 @@ class RFIDService(QObject):
                         key_caps = device.capabilities().get(evdev.ecodes.EV_KEY, [])
                         # RFID readers typically have number keys at minimum
                         key_count = len(key_caps)
-                        
+
                         if key_count > 10:  # It should have at least digit keys
                             self.device_path = device.path
                             logger.info(f"Auto-detected RFID reader: {device.name} ({device.path})")
                             return True
-            
+
             logger.warning("No RFID reader device auto-detected. Will use simulation mode.")
             return False
-            
+
         except ImportError:
             logger.error("evdev library not installed. Please install it with: pip install evdev")
             return False
         except Exception as e:
             logger.error(f"Error detecting RFID devices: {str(e)}")
             return False
-    
+
     def start(self):
         """
         Start the RFID reading service.
@@ -187,15 +187,15 @@ class RFIDService(QObject):
         if self.running:
             logger.warning("RFID Service is already running")
             return
-        
+
         self.running = True
-        
+
         # If we're not in simulation mode and on Linux, try one more time to detect the device
         if not self.simulation_mode and self.os_platform.startswith('linux') and not self.device_path:
             if not self._find_device_by_vid_pid() and not self._detect_rfid_device():
                 logger.warning("No RFID device detected, falling back to simulation mode")
                 self.simulation_mode = True
-        
+
         if self.simulation_mode:
             logger.info("Starting RFID Service in simulation mode")
             self.read_thread = threading.Thread(target=self._simulate_rfid_reading)
@@ -206,11 +206,11 @@ class RFIDService(QObject):
             else:
                 logger.warning(f"RFID hardware mode not supported on {self.os_platform}, falling back to simulation")
                 self.read_thread = threading.Thread(target=self._simulate_rfid_reading)
-        
+
         self.read_thread.daemon = True
         self.read_thread.start()
         logger.info("RFID Service started")
-    
+
     def stop(self):
         """
         Stop the RFID reading service.
@@ -219,27 +219,41 @@ class RFIDService(QObject):
         if self.read_thread and self.read_thread.is_alive():
             self.read_thread.join(timeout=1.0)
         logger.info("RFID Service stopped")
-    
+
     def register_callback(self, callback):
         """
         Register a callback function to be called when an RFID card is read.
-        
+
         Args:
             callback (callable): Function that takes an RFID UID string as argument
         """
-        self.callbacks.append(callback)
-        logger.info(f"Registered RFID callback: {callback.__name__}")
-    
+        if callback not in self.callbacks:
+            self.callbacks.append(callback)
+            callback_name = getattr(callback, '__name__', str(callback))
+            logger.info(f"Registered RFID callback: {callback_name}")
+
+    def unregister_callback(self, callback):
+        """
+        Unregister a previously registered callback.
+
+        Args:
+            callback (callable): Function to unregister
+        """
+        if callback in self.callbacks:
+            self.callbacks.remove(callback)
+            callback_name = getattr(callback, '__name__', str(callback))
+            logger.info(f"Unregistered RFID callback: {callback_name}")
+
     def _notify_callbacks_safe(self, rfid_uid):
         """
         Thread-safe notification of callbacks via Qt signals.
         Also attempts to look up the student based on the RFID UID.
-        
+
         Args:
             rfid_uid (str): The RFID UID that was read
         """
         logger.info(f"RFID Service notifying callbacks for UID: {rfid_uid}")
-        
+
         # Attempt to verify the student immediately
         student = None
         try:
@@ -254,24 +268,32 @@ class RFIDService(QObject):
             logger.error(f"Error verifying student in RFIDService: {str(e)}")
             student = None  # Ensure student is None if lookup fails
 
+        # Make a copy of callbacks to avoid issues if callbacks are modified during iteration
+        callbacks_to_notify = list(self.callbacks)
+
         # Notify all registered callbacks
-        for callback in self.callbacks:
+        for callback in callbacks_to_notify:
             try:
-                logger.info(f"Calling callback: {callback.__name__} with student: {student is not None}, rfid_uid: {rfid_uid}")
+                if callback is None:
+                    logger.warning("Skipping None callback")
+                    continue
+
+                callback_name = getattr(callback, '__name__', str(callback))
+                logger.info(f"Calling callback: {callback_name} with student: {student is not None}, rfid_uid: {rfid_uid}")
                 callback(student, rfid_uid)
             except Exception as e:
-                logger.error(f"Error in RFID callback {callback.__name__}: {str(e)}")
-    
+                logger.error(f"Error in RFID callback {getattr(callback, '__name__', str(callback))}: {str(e)}")
+
     def _notify_callbacks(self, rfid_uid):
         """
         Emit signal to notify callbacks in a thread-safe way.
-        
+
         Args:
             rfid_uid (str): The RFID UID that was read
         """
         # Use signal to ensure thread safety
         self.card_read_signal.emit(rfid_uid)
-    
+
     def _read_linux_rfid(self):
         """
         Read RFID input using evdev on Linux.
@@ -279,33 +301,33 @@ class RFIDService(QObject):
         try:
             import evdev
             from evdev import categorize, ecodes
-            
+
             # Verify device path is available
             if not self.device_path:
                 logger.error("No RFID device path specified. Falling back to simulation mode.")
                 self.simulation_mode = True
                 self._simulate_rfid_reading()
                 return
-            
+
             try:
                 # Open the device
                 device = evdev.InputDevice(self.device_path)
                 logger.info(f"Reading RFID from device: {device.name} ({device.device_path if hasattr(device, 'device_path') else self.device_path})")
-                
+
                 # Let's take exclusive control of the device to prevent keyboard input in other apps
                 try:
                     device.grab()
                     logger.info("Grabbed exclusive access to the RFID reader")
                 except Exception as grab_err:
                     logger.warning(f"Could not grab exclusive access to RFID reader: {grab_err}")
-                
+
             except Exception as e:
                 logger.error(f"Error opening RFID device {self.device_path}: {str(e)}")
                 logger.info("Falling back to simulation mode")
                 self.simulation_mode = True
                 self._simulate_rfid_reading()
                 return
-            
+
             # Mapping from key codes to characters (extend to support more characters)
             key_map = {
                 evdev.ecodes.KEY_0: "0", evdev.ecodes.KEY_1: "1",
@@ -321,7 +343,7 @@ class RFIDService(QObject):
                 evdev.ecodes.KEY_DOT: ".", evdev.ecodes.KEY_COMMA: ",",
                 evdev.ecodes.KEY_SEMICOLON: ";", evdev.ecodes.KEY_APOSTROPHE: "'",
                 # Add all digit and letter keys to be safe
-                evdev.ecodes.KEY_G: "G", evdev.ecodes.KEY_H: "H", 
+                evdev.ecodes.KEY_G: "G", evdev.ecodes.KEY_H: "H",
                 evdev.ecodes.KEY_I: "I", evdev.ecodes.KEY_J: "J",
                 evdev.ecodes.KEY_K: "K", evdev.ecodes.KEY_L: "L",
                 evdev.ecodes.KEY_M: "M", evdev.ecodes.KEY_N: "N",
@@ -332,34 +354,34 @@ class RFIDService(QObject):
                 evdev.ecodes.KEY_W: "W", evdev.ecodes.KEY_X: "X",
                 evdev.ecodes.KEY_Y: "Y", evdev.ecodes.KEY_Z: "Z"
             }
-            
+
             # Read input events
             current_rfid = ""
             last_event_time = 0
-            
+
             logger.info("RFID reader is active and waiting for cards (supports 13.56 MHz)")
-            
+
             while self.running:
                 try:
                     # Enhanced debugging - log all events for debugging
                     logger.info("Waiting for RFID card events...")
-                    
+
                     for event in device.read_loop():
                         if not self.running:
                             break
-                        
+
                         # Enhanced logging for all events
                         if event.type == evdev.ecodes.EV_KEY:
                             logger.debug(f"RFID Key event: type={event.type}, code={event.code}, value={event.value}")
-                        
+
                         # Reset the RFID string if there's a pause between key events
                         current_time = time.time()
                         if current_time - last_event_time > 1.0 and current_rfid:
                             logger.debug(f"Timeout reset for partial RFID: {current_rfid}")
                             current_rfid = ""
-                        
+
                         last_event_time = current_time
-                        
+
                         if event.type == evdev.ecodes.EV_KEY and event.value == 1:  # Key pressed
                             logger.debug(f"Key event: {event.code}")
                             if event.code in key_map:
@@ -380,7 +402,7 @@ class RFIDService(QObject):
                                         key_name = name
                                         break
                                 logger.info(f"Unhandled key in RFID input: {key_name} ({event.code})")
-                                
+
                 except OSError as e:
                     logger.error(f"Device read error (device may have been disconnected): {str(e)}")
                     # Try to reopen the device
@@ -390,10 +412,10 @@ class RFIDService(QObject):
                             device.ungrab()
                         except:
                             pass
-                            
+
                         device = evdev.InputDevice(self.device_path)
                         logger.info(f"Reconnected to RFID device: {device.name}")
-                        
+
                         # Try to grab it again
                         try:
                             device.grab()
@@ -403,14 +425,14 @@ class RFIDService(QObject):
                     except Exception as e2:
                         logger.error(f"Failed to reopen device: {str(e2)}")
                         time.sleep(5)  # Wait before trying again
-            
+
             # Make sure to ungrab the device when we're done
             try:
                 device.ungrab()
                 logger.info("Released exclusive access to RFID reader")
             except:
                 pass
-        
+
         except ImportError:
             logger.error("evdev library not installed. Please install it with: pip install evdev")
             logger.info("Falling back to simulation mode")
@@ -421,20 +443,20 @@ class RFIDService(QObject):
             logger.info("Falling back to simulation mode")
             self.simulation_mode = True
             self._simulate_rfid_reading()
-    
+
     def _simulate_rfid_reading(self):
         """
         Simulate RFID reading for development and testing.
         """
         logger.info("RFID simulation mode active. Use simulate_card_read() to trigger simulated reads.")
-        
+
         while self.running:
             time.sleep(1)  # Just keep the thread alive
-    
+
     def simulate_card_read(self, rfid_uid=None):
         """
         Simulate an RFID card read with a specified or random UID.
-        
+
         Args:
             rfid_uid (str, optional): RFID UID to simulate. If None, a random UID is generated.
         """
@@ -442,12 +464,12 @@ class RFIDService(QObject):
             # Generate a random RFID UID (10 characters hexadecimal - more like 13.56 MHz cards)
             import random
             rfid_uid = ''.join(random.choices('0123456789ABCDEF', k=10))
-        
+
         logger.info(f"Simulating RFID read (13.56 MHz format): {rfid_uid}")
-        
+
         # Use the signal method to ensure consistent processing path with real reads
         self._notify_callbacks(rfid_uid)
-        
+
         return rfid_uid
 
 # Singleton instance
@@ -460,4 +482,4 @@ def get_rfid_service():
     global rfid_service
     if rfid_service is None:
         rfid_service = RFIDService()
-    return rfid_service 
+    return rfid_service

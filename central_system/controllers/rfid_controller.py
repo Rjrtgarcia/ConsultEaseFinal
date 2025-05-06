@@ -10,14 +10,14 @@ class RFIDController:
     """
     Controller for handling RFID card scanning and student verification.
     """
-    
+
     def __init__(self):
         """
         Initialize the RFID controller.
         """
         self.rfid_service = get_rfid_service()
         self.callbacks = []
-    
+
     def start(self):
         """
         Start the RFID service and register callback.
@@ -25,28 +25,35 @@ class RFIDController:
         logger.info("Starting RFID controller")
         self.rfid_service.register_callback(self.on_rfid_read)
         self.rfid_service.start()
-    
+
     def stop(self):
         """
-        Stop the RFID service.
+        Stop the RFID service and unregister callbacks.
         """
         logger.info("Stopping RFID controller")
+        # Unregister our callback from the RFID service
+        try:
+            self.rfid_service.unregister_callback(self.on_rfid_read)
+        except Exception as e:
+            logger.error(f"Error unregistering RFID callback: {str(e)}")
+
+        # Stop the RFID service
         self.rfid_service.stop()
-    
+
     def register_callback(self, callback):
         """
         Register a callback to be called when a student is verified.
-        
+
         Args:
             callback (callable): Function that takes a Student object as argument
         """
         self.callbacks.append(callback)
         logger.info(f"Registered RFID controller callback: {callback.__name__}")
-    
+
     def _notify_callbacks(self, student, rfid_uid, error_message=None):
         """
         Notify all callbacks with the student and RFID information.
-        
+
         Args:
             student: The authenticated student object or None if not authenticated
             rfid_uid (str): The RFID UID that was read or None on error
@@ -57,37 +64,37 @@ class RFIDController:
                 # Check if callback accepts error_message parameter
                 import inspect
                 params = inspect.signature(callback).parameters
-                
+
                 if len(params) >= 3:
                     # Callback accepts error_message
                     callback(student, rfid_uid, error_message)
                 else:
                     # Callback doesn't accept error_message, use original signature
                     callback(student, rfid_uid)
-                    
+
             except Exception as e:
                 logger.error(f"Error in RFID callback: {str(e)}")
-    
+
     def on_rfid_read(self, student, rfid_uid):
         """
         Callback for RFID read events.
-        
+
         Args:
             student: Student object if already validated, None otherwise
             rfid_uid (str): The RFID UID that was read
         """
         logger.info(f"RFID read: {rfid_uid}")
-        
+
         # If we already have a validated student object, use it
         if student:
             self.handle_authenticated_student(student)
             return
-        
+
         # Otherwise, look up the student in the database
         try:
             # Try to find student with this RFID in the database
             student = self.verify_student(rfid_uid)
-            
+
             if student:
                 # Student found, handle authentication
                 self.handle_authenticated_student(student)
@@ -98,14 +105,14 @@ class RFIDController:
         except Exception as e:
             logger.error(f"Error authenticating student: {str(e)}")
             self.handle_authentication_failure(f"Error: {str(e)}")
-    
+
     def verify_student(self, rfid_uid):
         """
         Verify a student by RFID UID.
-        
+
         Args:
             rfid_uid (str): RFID UID to verify
-            
+
         Returns:
             Student: Student object if verified, None otherwise
         """
@@ -116,14 +123,14 @@ class RFIDController:
         except Exception as e:
             logger.error(f"Error verifying student: {str(e)}")
             return None
-    
+
     def simulate_scan(self, rfid_uid=None):
         """
         Simulate an RFID scan for development purposes.
-        
+
         Args:
             rfid_uid (str, optional): RFID UID to simulate. If None, a random UID is generated.
-        
+
         Returns:
             str: The simulated RFID UID
         """
@@ -132,15 +139,15 @@ class RFIDController:
     def handle_authenticated_student(self, student):
         """
         Handle successful student authentication.
-        
+
         Args:
             student: The authenticated student object
         """
         logger.info(f"Student authenticated: {student.name} (ID: {student.id})")
-        
+
         # Notify callbacks with authenticated student
         self._notify_callbacks(student, student.rfid_uid)
-        
+
         # Play success sound or visual feedback if available
         try:
             if hasattr(self, 'ui') and hasattr(self.ui, 'play_success_sound'):
@@ -151,18 +158,18 @@ class RFIDController:
     def handle_authentication_failure(self, error_message):
         """
         Handle failed student authentication.
-        
+
         Args:
             error_message (str): The error message explaining the failure
         """
         logger.warning(f"Authentication failed: {error_message}")
-        
+
         # Notify callbacks with failure
         self._notify_callbacks(None, None, error_message)
-        
+
         # Play error sound or visual feedback if available
         try:
             if hasattr(self, 'ui') and hasattr(self.ui, 'play_error_sound'):
                 self.ui.play_error_sound()
         except Exception as e:
-            logger.error(f"Error playing error sound: {str(e)}") 
+            logger.error(f"Error playing error sound: {str(e)}")
