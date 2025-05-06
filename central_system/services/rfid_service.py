@@ -254,6 +254,19 @@ class RFIDService(QObject):
         """
         logger.info(f"RFID Service notifying callbacks for UID: {rfid_uid}")
 
+        # CRITICAL: Force a database session refresh to ensure we have the latest data
+        try:
+            from ..models import get_db
+            db = get_db()
+            # Force SQLAlchemy to create a new session
+            db.close()
+            db = get_db(force_new=True)
+            logger.info("Forced database session refresh to ensure latest student data")
+        except Exception as e:
+            logger.error(f"Error refreshing database session: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
         # Attempt to verify the student immediately
         student = None
         try:

@@ -108,8 +108,9 @@ class AdminDashboardWindow(BaseWindow):
         # Hide this window
         self.hide()
 
-        # Emit signal to change to admin login window
-        self.change_window.emit("admin_login", None)
+        # Emit signal to change to the main login window (RFID scan) instead of admin login
+        logger.info("Redirecting to main login window (RFID scan) after admin logout")
+        self.change_window.emit("login", None)
 
     def handle_faculty_updated(self):
         """
@@ -572,14 +573,34 @@ class StudentManagementTab(QWidget):
                 db.add(new_student)
                 db.commit()
 
+                # Force a database refresh to ensure the new student is available
+                try:
+                    from ..models import get_db
+                    # Close the current session and create a new one
+                    db.close()
+                    db = get_db(force_new=True)
+                    logger.info(f"Forced database refresh after adding student: {name}")
+                except Exception as e:
+                    logger.error(f"Error refreshing database: {str(e)}")
+
                 # Directly refresh the RFID service
                 try:
                     from ..services import get_rfid_service
                     rfid_service = get_rfid_service()
                     rfid_service.refresh_student_data()
                     logger.info(f"Directly refreshed RFID service after adding student: {name}")
+
+                    # Log all students in the database for debugging
+                    from ..models import Student, get_db
+                    db = get_db(force_new=True)
+                    all_students = db.query(Student).all()
+                    logger.info(f"Available students in database after adding: {len(all_students)}")
+                    for s in all_students:
+                        logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
                 except Exception as e:
                     logger.error(f"Error refreshing RFID service: {str(e)}")
+                    import traceback
+                    logger.error(f"Traceback: {traceback.format_exc()}")
 
                 QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
                 self.refresh_data()

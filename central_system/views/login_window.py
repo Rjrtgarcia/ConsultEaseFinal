@@ -215,6 +215,28 @@ class LoginWindow(BaseWindow):
         self.logger.info("LoginWindow shown, starting RFID scanning")
         self.start_rfid_scanning()
 
+        # Force the keyboard to show up for manual RFID entry
+        try:
+            # Focus the RFID input field to trigger the keyboard
+            self.rfid_input.setFocus()
+
+            # Try to explicitly show the keyboard using DBus
+            import subprocess
+            import sys
+            if sys.platform.startswith('linux'):
+                try:
+                    # Try to use dbus-send to force the keyboard
+                    cmd = [
+                        "dbus-send", "--type=method_call", "--dest=sm.puri.OSK0",
+                        "/sm/puri/OSK0", "sm.puri.OSK0.SetVisible", "boolean:true"
+                    ]
+                    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    self.logger.info("Sent dbus command to show squeekboard")
+                except Exception as e:
+                    self.logger.error(f"Error showing keyboard: {str(e)}")
+        except Exception as e:
+            self.logger.error(f"Error focusing RFID input: {str(e)}")
+
     def resizeEvent(self, event):
         """Handle window resize"""
         super().resizeEvent(event)

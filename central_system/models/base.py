@@ -43,15 +43,30 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # Create base class for models
 Base = declarative_base()
 
-def get_db():
+def get_db(force_new=False):
     """
     Get database session.
+
+    Args:
+        force_new (bool): If True, create a new session even if one exists
     """
+    # Create a new session
     db = SessionLocal()
+
+    # If force_new is True, ensure we're getting fresh data
+    if force_new:
+        # Expire all objects in the session to force a refresh from the database
+        db.expire_all()
+
+        # You can also use this to clear the session entirely
+        # db.close()
+        # db = SessionLocal()
+
     try:
         return db
-    finally:
+    except Exception as e:
         db.close()
+        raise e
 
 def init_db():
     """
