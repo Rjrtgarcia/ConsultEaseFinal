@@ -199,6 +199,18 @@ class LoginWindow(BaseWindow):
     def showEvent(self, event):
         """Override showEvent"""
         super().showEvent(event)
+
+        # Refresh RFID service to ensure it has the latest student data
+        try:
+            from ..services import get_rfid_service
+            rfid_service = get_rfid_service()
+            rfid_service.refresh_student_data()
+            self.logger.info("Refreshed RFID service student data when login window shown")
+        except Exception as e:
+            self.logger.error(f"Error refreshing RFID service: {str(e)}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+
         # Start RFID scanning when the window is shown
         self.logger.info("LoginWindow shown, starting RFID scanning")
         self.start_rfid_scanning()
@@ -211,6 +223,17 @@ class LoginWindow(BaseWindow):
         """
         Start the RFID scanning animation and process.
         """
+        # Refresh RFID service to ensure it has the latest student data
+        try:
+            from ..services import get_rfid_service
+            rfid_service = get_rfid_service()
+            rfid_service.refresh_student_data()
+            self.logger.info("Refreshed RFID service student data when starting RFID scanning")
+        except Exception as e:
+            self.logger.error(f"Error refreshing RFID service: {str(e)}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
+
         self.rfid_reading = True
         self.scanning_status_label.setText("Scanning...")
         self.scanning_status_label.setStyleSheet("font-size: 20pt; color: #4a86e8;")
@@ -264,6 +287,15 @@ class LoginWindow(BaseWindow):
         # If student is not provided, try to look it up directly
         if not student and rfid_uid:
             try:
+                # First refresh the RFID service to ensure it has the latest student data
+                try:
+                    from ..services import get_rfid_service
+                    rfid_service = get_rfid_service()
+                    rfid_service.refresh_student_data()
+                    self.logger.info("Refreshed RFID service student data before looking up student")
+                except Exception as e:
+                    self.logger.error(f"Error refreshing RFID service: {str(e)}")
+
                 from ..models import Student, get_db
                 db = get_db()
 
@@ -396,6 +428,10 @@ class LoginWindow(BaseWindow):
             from ..services import get_rfid_service
             rfid_service = get_rfid_service()
 
+            # Refresh the RFID service to ensure it has the latest student data
+            rfid_service.refresh_student_data()
+            self.logger.info("Refreshed RFID service student data before simulating scan")
+
             # Simulate a card read - this will trigger the normal authentication flow
             # through the registered callbacks
             self.logger.info(f"Simulating RFID scan with UID: {rfid_uid}")
@@ -414,6 +450,7 @@ class LoginWindow(BaseWindow):
         """
         rfid_uid = self.rfid_input.text().strip()
         if rfid_uid:
+            self.logger.info(f"Manual RFID entry: {rfid_uid}")
             self.rfid_input.clear()
             self.start_rfid_scanning()
 
@@ -422,15 +459,21 @@ class LoginWindow(BaseWindow):
                 from ..services import get_rfid_service
                 rfid_service = get_rfid_service()
 
+                # Refresh the RFID service to ensure it has the latest student data
+                rfid_service.refresh_student_data()
+                self.logger.info("Refreshed RFID service student data before manual RFID entry")
+
                 # Use the entered RFID UID - this will trigger the normal authentication flow
                 # through the registered callbacks
+                self.logger.info(f"Simulating RFID scan with manually entered UID: {rfid_uid}")
                 rfid_service.simulate_card_read(rfid_uid)
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"Error processing manual RFID entry: {str(e)}")
+                self.logger.error(f"Error processing manual RFID entry: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
 
-                # If there's an error, stop the scanning animation and show an error
+                # If there's an error, directly handle the RFID read
+                self.logger.info(f"Directly handling RFID read due to error: {rfid_uid}")
                 QTimer.singleShot(1000, lambda: self.handle_rfid_read(rfid_uid, None))
 
 # Create a script to ensure the keyboard works on Raspberry Pi

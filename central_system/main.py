@@ -415,12 +415,16 @@ class ConsultEaseApp:
         """
         Handle student data updated event.
         """
-        logger.info("Student data updated, refreshing RFID controller")
+        logger.info("Student data updated, refreshing RFID service and controller")
 
-        # Refresh RFID controller's student data
+        # Refresh RFID service and controller's student data
         try:
-            # Force the RFID controller to refresh its student data
-            # This ensures newly added students are immediately available for RFID scanning
+            # First, refresh the RFID service directly
+            from central_system.services import get_rfid_service
+            rfid_service = get_rfid_service()
+            rfid_service.refresh_student_data()
+
+            # Then refresh the RFID controller
             students = self.rfid_controller.refresh_student_data()
 
             # Log all students for debugging
@@ -431,6 +435,8 @@ class ConsultEaseApp:
             if self.login_window and self.login_window.isVisible():
                 logger.info("Login window is active, ensuring RFID scanning is active")
                 self.login_window.start_rfid_scanning()
+
+            logger.info("Student data refresh complete")
         except Exception as e:
             logger.error(f"Error refreshing student data: {str(e)}")
             import traceback

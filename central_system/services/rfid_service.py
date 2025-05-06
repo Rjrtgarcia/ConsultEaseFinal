@@ -481,6 +481,29 @@ class RFIDService(QObject):
         while self.running:
             time.sleep(1)  # Just keep the thread alive
 
+    def refresh_student_data(self):
+        """
+        Refresh the student data cache.
+        This should be called when students are added, updated, or deleted.
+        """
+        logger.info("Refreshing RFID service student data cache")
+        try:
+            from ..models import Student, get_db
+            db = get_db()
+            students = db.query(Student).all()
+            logger.info(f"Refreshed student data cache, found {len(students)} students")
+
+            # Log all students for debugging
+            for student in students:
+                logger.info(f"  - ID: {student.id}, Name: {student.name}, RFID: {student.rfid_uid}")
+
+            return True
+        except Exception as e:
+            logger.error(f"Error refreshing student data cache: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return False
+
     def simulate_card_read(self, rfid_uid=None):
         """
         Simulate an RFID card read with a specified or random UID.

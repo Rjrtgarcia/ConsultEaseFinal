@@ -572,6 +572,15 @@ class StudentManagementTab(QWidget):
                 db.add(new_student)
                 db.commit()
 
+                # Directly refresh the RFID service
+                try:
+                    from ..services import get_rfid_service
+                    rfid_service = get_rfid_service()
+                    rfid_service.refresh_student_data()
+                    logger.info(f"Directly refreshed RFID service after adding student: {name}")
+                except Exception as e:
+                    logger.error(f"Error refreshing RFID service: {str(e)}")
+
                 QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
                 self.refresh_data()
                 self.student_updated.emit()
@@ -629,6 +638,15 @@ class StudentManagementTab(QWidget):
 
                 db.commit()
 
+                # Directly refresh the RFID service
+                try:
+                    from ..services import get_rfid_service
+                    rfid_service = get_rfid_service()
+                    rfid_service.refresh_student_data()
+                    logger.info(f"Directly refreshed RFID service after updating student: {name}")
+                except Exception as e:
+                    logger.error(f"Error refreshing RFID service: {str(e)}")
+
                 QMessageBox.information(self, "Edit Student", f"Student '{name}' updated successfully.")
                 self.refresh_data()
                 self.student_updated.emit()
@@ -673,6 +691,15 @@ class StudentManagementTab(QWidget):
 
                 db.delete(student)
                 db.commit()
+
+                # Directly refresh the RFID service
+                try:
+                    from ..services import get_rfid_service
+                    rfid_service = get_rfid_service()
+                    rfid_service.refresh_student_data()
+                    logger.info(f"Directly refreshed RFID service after deleting student: {student_name}")
+                except Exception as e:
+                    logger.error(f"Error refreshing RFID service: {str(e)}")
 
                 QMessageBox.information(self, "Delete Student", f"Student '{student_name}' deleted successfully.")
                 self.refresh_data()
@@ -740,6 +767,15 @@ class StudentManagementTab(QWidget):
 
                                     db.add(new_student)
                                     db.commit()
+
+                                    # Directly refresh the RFID service
+                                    try:
+                                        from ..services import get_rfid_service
+                                        rfid_service = get_rfid_service()
+                                        rfid_service.refresh_student_data()
+                                        logger.info(f"Directly refreshed RFID service after adding student via RFID scan: {name}")
+                                    except Exception as e:
+                                        logger.error(f"Error refreshing RFID service: {str(e)}")
 
                                     QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
                                     self.refresh_data()
