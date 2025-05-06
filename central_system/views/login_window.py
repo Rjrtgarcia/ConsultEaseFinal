@@ -250,10 +250,36 @@ class LoginWindow(BaseWindow):
         # Stop scanning animation
         self.stop_rfid_scanning()
 
+        # If student is not provided, try to look it up directly
+        if not student and rfid_uid:
+            try:
+                from ..models import Student, get_db
+                db = get_db()
+                student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+
+                if student:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"LoginWindow: Found student directly: {student.name} with RFID: {rfid_uid}")
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"LoginWindow: Error looking up student: {str(e)}")
+
         if student:
             # Authentication successful
             self.show_success(f"Welcome, {student.name}!")
+
+            # Log the emission of the signal
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"LoginWindow: Emitting student_authenticated signal for {student.name}")
+
+            # Emit the signal to navigate to the dashboard
             self.student_authenticated.emit(student)
+
+            # Also emit a change_window signal as a backup
+            self.change_window.emit("dashboard", student)
         else:
             # Authentication failed
             self.show_error("RFID card not recognized. Please try again or contact an administrator.")

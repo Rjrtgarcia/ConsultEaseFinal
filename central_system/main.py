@@ -207,7 +207,12 @@ class ConsultEaseApp:
         if self.admin_login_window:
             self.admin_login_window.hide()
 
+        # Ensure proper display
         self.dashboard_window.show()
+        self.dashboard_window.showFullScreen()  # Force fullscreen to ensure it takes effect
+
+        # Log that we've shown the dashboard
+        logger.info(f"Showing dashboard for student: {student.name if student else 'Unknown'}")
 
     def show_admin_login_window(self):
         """
@@ -273,7 +278,12 @@ class ConsultEaseApp:
         Args:
             student (Student): Authenticated student
         """
-        logger.info(f"Student authenticated: {student.name}")
+        logger.info(f"Student authenticated: {student.name if student else 'Unknown'}")
+
+        # Store the current student
+        self.current_student = student
+
+        # Show the dashboard window
         self.show_dashboard_window(student)
 
     def handle_admin_authenticated(self, credentials):

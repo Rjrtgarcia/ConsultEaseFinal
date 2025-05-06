@@ -66,6 +66,7 @@ def init_db():
         # Import models here to avoid circular imports
         from .admin import Admin
         from .faculty import Faculty
+        from .student import Student
 
         # Check if admin table is empty
         admin_count = db.query(Admin).count()
@@ -104,6 +105,25 @@ def init_db():
             ]
             db.add_all(sample_faculty)
             print("Created sample faculty data")
+
+        # Check if student table is empty
+        student_count = db.query(Student).count()
+        if student_count == 0:
+            # Create some sample students
+            sample_students = [
+                Student(
+                    name="Alice Johnson",
+                    department="Computer Science",
+                    rfid_uid="TESTCARD123"
+                ),
+                Student(
+                    name="Bob Williams",
+                    department="Mathematics",
+                    rfid_uid="TESTCARD456"
+                )
+            ]
+            db.add_all(sample_students)
+            print("Created sample student data")
 
         db.commit()
     except Exception as e:
