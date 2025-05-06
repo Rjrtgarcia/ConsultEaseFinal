@@ -235,9 +235,34 @@ class FacultyManagementTab(QWidget):
                 department = dialog.department_input.text().strip()
                 email = dialog.email_input.text().strip()
                 ble_id = dialog.ble_id_input.text().strip()
+                image_path = dialog.image_path
+
+                # Process image if provided
+                if image_path:
+                    # Get the filename only
+                    import os
+                    import shutil
+
+                    # Create images directory if it doesn't exist
+                    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                    images_dir = os.path.join(base_dir, 'images', 'faculty')
+                    if not os.path.exists(images_dir):
+                        os.makedirs(images_dir)
+
+                    # Generate a unique filename
+                    filename = f"{email.split('@')[0]}_{os.path.basename(image_path)}"
+                    dest_path = os.path.join(images_dir, filename)
+
+                    # Copy the image file
+                    shutil.copy2(image_path, dest_path)
+
+                    # Store the relative path
+                    image_path = filename
+                else:
+                    image_path = None
 
                 # Add faculty using controller
-                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id)
+                faculty = self.faculty_controller.add_faculty(name, department, email, ble_id, image_path)
 
                 if faculty:
                     QMessageBox.information(self, "Add Faculty", f"Faculty '{name}' added successfully.")
@@ -277,16 +302,47 @@ class FacultyManagementTab(QWidget):
         dialog.email_input.setText(faculty.email)
         dialog.ble_id_input.setText(faculty.ble_id)
 
+        # Set image path if available
+        if faculty.image_path:
+            dialog.image_path = faculty.get_image_path()
+            dialog.image_path_input.setText(faculty.image_path)
+
         if dialog.exec_() == QDialog.Accepted:
             try:
                 name = dialog.name_input.text().strip()
                 department = dialog.department_input.text().strip()
                 email = dialog.email_input.text().strip()
                 ble_id = dialog.ble_id_input.text().strip()
+                image_path = dialog.image_path
+
+                # Process image if provided and different from current
+                if image_path and (not faculty.image_path or image_path != faculty.get_image_path()):
+                    # Get the filename only
+                    import os
+                    import shutil
+
+                    # Create images directory if it doesn't exist
+                    base_dir = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+                    images_dir = os.path.join(base_dir, 'images', 'faculty')
+                    if not os.path.exists(images_dir):
+                        os.makedirs(images_dir)
+
+                    # Generate a unique filename
+                    filename = f"{email.split('@')[0]}_{os.path.basename(image_path)}"
+                    dest_path = os.path.join(images_dir, filename)
+
+                    # Copy the image file
+                    shutil.copy2(image_path, dest_path)
+
+                    # Store the relative path
+                    image_path = filename
+                elif faculty.image_path:
+                    # Keep the existing image path
+                    image_path = faculty.image_path
 
                 # Update faculty using controller
                 updated_faculty = self.faculty_controller.update_faculty(
-                    faculty_id, name, department, email, ble_id
+                    faculty_id, name, department, email, ble_id, image_path
                 )
 
                 if updated_faculty:
@@ -347,6 +403,7 @@ class FacultyDialog(QDialog):
     def __init__(self, faculty_id=None, parent=None):
         super().__init__(parent)
         self.faculty_id = faculty_id
+        self.image_path = None
         self.init_ui()
 
     def init_ui(self):
@@ -378,6 +435,20 @@ class FacultyDialog(QDialog):
         self.ble_id_input = QLineEdit()
         form_layout.addRow("BLE ID:", self.ble_id_input)
 
+        # Image selection
+        image_layout = QHBoxLayout()
+        self.image_path_input = QLineEdit()
+        self.image_path_input.setReadOnly(True)
+        self.image_path_input.setPlaceholderText("No image selected")
+
+        browse_button = QPushButton("Browse...")
+        browse_button.clicked.connect(self.browse_image)
+
+        image_layout.addWidget(self.image_path_input)
+        image_layout.addWidget(browse_button)
+
+        form_layout.addRow("Profile Image:", image_layout)
+
         layout.addLayout(form_layout)
 
         # Buttons
@@ -390,6 +461,20 @@ class FacultyDialog(QDialog):
 
         # If editing, the faculty data will be populated by the caller
         # No need to fetch data here as it's passed in when the dialog is created
+
+    def browse_image(self):
+        """
+        Open file dialog to select a faculty image.
+        """
+        file_dialog = QFileDialog()
+        file_dialog.setNameFilter("Images (*.png *.jpg *.jpeg)")
+        file_dialog.setFileMode(QFileDialog.ExistingFile)
+
+        if file_dialog.exec_():
+            selected_files = file_dialog.selectedFiles()
+            if selected_files:
+                self.image_path = selected_files[0]
+                self.image_path_input.setText(self.image_path)
 
     def accept(self):
         """

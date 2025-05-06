@@ -376,7 +376,7 @@ class ConsultEaseApp:
         Handle consultation request event.
 
         Args:
-            faculty (dict): Faculty information
+            faculty (object): Faculty object or dictionary
             message (str): Consultation message
             course_code (str): Course code
         """
@@ -384,12 +384,20 @@ class ConsultEaseApp:
             logger.error("Cannot request consultation: no student authenticated")
             return
 
-        logger.info(f"Consultation requested with: {faculty['name']}")
+        # Handle both Faculty object and dictionary
+        if isinstance(faculty, dict):
+            faculty_name = faculty['name']
+            faculty_id = faculty['id']
+        else:
+            faculty_name = faculty.name
+            faculty_id = faculty.id
+
+        logger.info(f"Consultation requested with: {faculty_name}")
 
         # Create consultation request
         consultation = {
             'student_id': self.current_student.id,
-            'faculty_id': faculty['id'],
+            'faculty_id': faculty_id,
             'message': message,
             'course_code': course_code,
             'status': 'pending'
@@ -401,7 +409,7 @@ class ConsultEaseApp:
         # Show success/error message
         if success:
             self.dashboard_window.show_notification(
-                f"Consultation request sent to {faculty['name']}",
+                f"Consultation request sent to {faculty_name}",
                 "success"
             )
         else:
