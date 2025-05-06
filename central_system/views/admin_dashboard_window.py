@@ -573,33 +573,32 @@ class StudentManagementTab(QWidget):
                 db.add(new_student)
                 db.commit()
 
-                # Force a database refresh to ensure the new student is available
-                try:
-                    from ..models import get_db
-                    # Close the current session and create a new one
-                    db.close()
-                    db = get_db(force_new=True)
-                    logger.info(f"Forced database refresh after adding student: {name}")
-                except Exception as e:
-                    logger.error(f"Error refreshing database: {str(e)}")
+                # Import all necessary modules at the beginning of the block
+                from ..models import Student, get_db
+                from ..services import get_rfid_service
+                import traceback
+
+                # Commit the current transaction
+                db.commit()
+                logger.info(f"Added student: {name} with RFID: {rfid_uid}")
 
                 # Directly refresh the RFID service
                 try:
-                    from ..services import get_rfid_service
-                    rfid_service = get_rfid_service()
-                    rfid_service.refresh_student_data()
-                    logger.info(f"Directly refreshed RFID service after adding student: {name}")
+                    # Get a fresh database connection
+                    fresh_db = get_db(force_new=True)
 
                     # Log all students in the database for debugging
-                    from ..models import Student, get_db
-                    db = get_db(force_new=True)
-                    all_students = db.query(Student).all()
+                    all_students = fresh_db.query(Student).all()
                     logger.info(f"Available students in database after adding: {len(all_students)}")
                     for s in all_students:
                         logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
+
+                    # Refresh the RFID service
+                    rfid_service = get_rfid_service()
+                    rfid_service.refresh_student_data()
+                    logger.info(f"Directly refreshed RFID service after adding student: {name}")
                 except Exception as e:
                     logger.error(f"Error refreshing RFID service: {str(e)}")
-                    import traceback
                     logger.error(f"Traceback: {traceback.format_exc()}")
 
                 QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
@@ -659,14 +658,29 @@ class StudentManagementTab(QWidget):
 
                 db.commit()
 
+                # Import all necessary modules at the beginning of the block
+                from ..models import Student, get_db
+                from ..services import get_rfid_service
+                import traceback
+
                 # Directly refresh the RFID service
                 try:
-                    from ..services import get_rfid_service
+                    # Get a fresh database connection
+                    fresh_db = get_db(force_new=True)
+
+                    # Log all students in the database for debugging
+                    all_students = fresh_db.query(Student).all()
+                    logger.info(f"Available students in database after updating: {len(all_students)}")
+                    for s in all_students:
+                        logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
+
+                    # Refresh the RFID service
                     rfid_service = get_rfid_service()
                     rfid_service.refresh_student_data()
                     logger.info(f"Directly refreshed RFID service after updating student: {name}")
                 except Exception as e:
                     logger.error(f"Error refreshing RFID service: {str(e)}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
 
                 QMessageBox.information(self, "Edit Student", f"Student '{name}' updated successfully.")
                 self.refresh_data()
@@ -713,14 +727,29 @@ class StudentManagementTab(QWidget):
                 db.delete(student)
                 db.commit()
 
+                # Import all necessary modules at the beginning of the block
+                from ..models import Student, get_db
+                from ..services import get_rfid_service
+                import traceback
+
                 # Directly refresh the RFID service
                 try:
-                    from ..services import get_rfid_service
+                    # Get a fresh database connection
+                    fresh_db = get_db(force_new=True)
+
+                    # Log all students in the database for debugging
+                    all_students = fresh_db.query(Student).all()
+                    logger.info(f"Available students in database after deletion: {len(all_students)}")
+                    for s in all_students:
+                        logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
+
+                    # Refresh the RFID service
                     rfid_service = get_rfid_service()
                     rfid_service.refresh_student_data()
                     logger.info(f"Directly refreshed RFID service after deleting student: {student_name}")
                 except Exception as e:
                     logger.error(f"Error refreshing RFID service: {str(e)}")
+                    logger.error(f"Traceback: {traceback.format_exc()}")
 
                 QMessageBox.information(self, "Delete Student", f"Student '{student_name}' deleted successfully.")
                 self.refresh_data()
@@ -789,14 +818,29 @@ class StudentManagementTab(QWidget):
                                     db.add(new_student)
                                     db.commit()
 
+                                    # Import all necessary modules at the beginning of the block
+                                    from ..models import Student, get_db
+                                    from ..services import get_rfid_service
+                                    import traceback
+
                                     # Directly refresh the RFID service
                                     try:
-                                        from ..services import get_rfid_service
+                                        # Get a fresh database connection
+                                        fresh_db = get_db(force_new=True)
+
+                                        # Log all students in the database for debugging
+                                        all_students = fresh_db.query(Student).all()
+                                        logger.info(f"Available students in database after adding via RFID scan: {len(all_students)}")
+                                        for s in all_students:
+                                            logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
+
+                                        # Refresh the RFID service
                                         rfid_service = get_rfid_service()
                                         rfid_service.refresh_student_data()
                                         logger.info(f"Directly refreshed RFID service after adding student via RFID scan: {name}")
                                     except Exception as e:
                                         logger.error(f"Error refreshing RFID service: {str(e)}")
+                                        logger.error(f"Traceback: {traceback.format_exc()}")
 
                                     QMessageBox.information(self, "Add Student", f"Student '{name}' added successfully.")
                                     self.refresh_data()

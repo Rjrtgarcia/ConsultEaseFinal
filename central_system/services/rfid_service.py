@@ -502,13 +502,23 @@ class RFIDService(QObject):
         logger.info("Refreshing RFID service student data cache")
         try:
             from ..models import Student, get_db
-            db = get_db()
+
+            # Force a new database session to ensure we get fresh data
+            db = get_db(force_new=True)
+
+            # Explicitly expire all objects to force a refresh from the database
+            db.expire_all()
+
+            # Query all students
             students = db.query(Student).all()
             logger.info(f"Refreshed student data cache, found {len(students)} students")
 
             # Log all students for debugging
             for student in students:
                 logger.info(f"  - ID: {student.id}, Name: {student.name}, RFID: {student.rfid_uid}")
+
+            # Close the database session to ensure it's not kept open
+            db.close()
 
             return True
         except Exception as e:
