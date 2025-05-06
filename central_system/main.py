@@ -97,6 +97,9 @@ class ConsultEaseApp:
         # Ensure default admin exists
         self.admin_controller.ensure_default_admin()
 
+        # Make Dr. John Smith available for testing
+        self._ensure_dr_john_smith_available()
+
         # Initialize windows
         self.login_window = None
         self.dashboard_window = None
@@ -162,6 +165,29 @@ class ConsultEaseApp:
         logger.info(f"Using {theme} theme based on preference")
 
         return theme
+
+    def _ensure_dr_john_smith_available(self):
+        """
+        Make sure Dr. John Smith is available for testing.
+        """
+        try:
+            from central_system.models import Faculty, get_db
+
+            db = get_db()
+            # Find Dr. John Smith by name
+            faculty = db.query(Faculty).filter(Faculty.name == "Dr. John Smith").first()
+
+            if faculty:
+                logger.info(f"Found Dr. John Smith (ID: {faculty.id}), setting status to available")
+                faculty.status = True
+                db.commit()
+                logger.info("Dr. John Smith is now available for testing")
+            else:
+                logger.warning("Dr. John Smith not found in the database")
+        except Exception as e:
+            logger.error(f"Error making Dr. John Smith available: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def run(self):
         """
@@ -389,8 +415,26 @@ class ConsultEaseApp:
         """
         Handle student data updated event.
         """
-        # TODO: Update student data in dashboard if needed
-        pass
+        logger.info("Student data updated, refreshing RFID controller")
+
+        # Refresh RFID controller's student data
+        try:
+            # Force the RFID controller to refresh its student data
+            # This ensures newly added students are immediately available for RFID scanning
+            students = self.rfid_controller.refresh_student_data()
+
+            # Log all students for debugging
+            for student in students:
+                logger.info(f"Student: ID={student.id}, Name={student.name}, RFID={student.rfid_uid}")
+
+            # If login window is active, make sure it's ready for scanning
+            if self.login_window and self.login_window.isVisible():
+                logger.info("Login window is active, ensuring RFID scanning is active")
+                self.login_window.start_rfid_scanning()
+        except Exception as e:
+            logger.error(f"Error refreshing student data: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def handle_window_change(self, window_name, data=None):
         """

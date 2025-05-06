@@ -118,11 +118,56 @@ class RFIDController:
         """
         try:
             db = get_db()
+
+            # Try exact match first
+            logger.info(f"Looking up student with RFID UID: {rfid_uid}")
             student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
+
+            # If no exact match, try case-insensitive match
+            if not student:
+                logger.info(f"No exact match found, trying case-insensitive match for RFID: {rfid_uid}")
+                # For PostgreSQL
+                try:
+                    student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
+                except:
+                    # For SQLite
+                    student = db.query(Student).filter(Student.rfid_uid.lower() == rfid_uid.lower()).first()
+
+            if student:
+                logger.info(f"Student verified: {student.name} with ID: {student.id}")
+            else:
+                # Log all students in the database for debugging
+                all_students = db.query(Student).all()
+                logger.warning(f"No student found for RFID {rfid_uid}")
+                logger.info(f"Available students in database: {len(all_students)}")
+                for s in all_students:
+                    logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
+
             return student
         except Exception as e:
             logger.error(f"Error verifying student: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
+
+    def refresh_student_data(self):
+        """
+        Refresh student data from the database.
+        This ensures newly added students are immediately available for RFID scanning.
+
+        Returns:
+            list: List of all students in the database
+        """
+        try:
+            db = get_db()
+            students = db.query(Student).all()
+            logger.info(f"Refreshed student data, found {len(students)} students")
+            return students
+        except Exception as e:
+            logger.error(f"Error refreshing student data: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return []
 
     def simulate_scan(self, rfid_uid=None):
         """

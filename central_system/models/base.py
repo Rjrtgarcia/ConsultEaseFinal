@@ -93,7 +93,7 @@ def init_db():
                     department="Computer Science",
                     email="john.smith@university.edu",
                     ble_id="11:22:33:44:55:66",
-                    status=False
+                    status=True  # Set to True to make Dr. John Smith available for testing
                 ),
                 Faculty(
                     name="Dr. Jane Doe",
