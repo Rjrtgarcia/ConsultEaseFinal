@@ -2,7 +2,7 @@ import sys
 import os
 import logging
 from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 # Add parent directory to path to help with imports
 sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
@@ -281,6 +281,14 @@ class ConsultEaseApp:
         # Ensure proper display
         self.admin_login_window.show()
         self.admin_login_window.showFullScreen()  # Force fullscreen
+
+        # Force the keyboard to show
+        if self.keyboard_handler:
+            logger.info("Forcing keyboard to show for admin login window")
+            self.keyboard_handler.force_show_keyboard()
+
+        # Focus the username input to trigger the keyboard
+        QTimer.singleShot(500, lambda: self.admin_login_window.username_input.setFocus())
 
     def show_admin_dashboard_window(self, admin=None):
         """
