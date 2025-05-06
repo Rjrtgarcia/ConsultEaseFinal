@@ -445,14 +445,7 @@ class RFIDService(QObject):
         
         logger.info(f"Simulating RFID read (13.56 MHz format): {rfid_uid}")
         
-        # Directly notify all callbacks
-        for callback in self.callbacks:
-            try:
-                callback(None, rfid_uid)
-            except Exception as e:
-                logger.error(f"Error in RFID callback during simulation: {str(e)}")
-        
-        # Also use the signal method as a backup
+        # Use the signal method to ensure consistent processing path with real reads
         self._notify_callbacks(rfid_uid)
         
         return rfid_uid

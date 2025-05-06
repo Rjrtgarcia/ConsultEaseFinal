@@ -113,6 +113,9 @@ class ConsultEaseApp:
         self.faculty_controller.start()
         self.consultation_controller.start()
         
+        # Connect cleanup method
+        self.app.aboutToQuit.connect(self.cleanup)
+        
         # Show login window
         self.show_login_window()
         

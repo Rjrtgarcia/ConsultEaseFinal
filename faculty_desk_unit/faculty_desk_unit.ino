@@ -57,12 +57,17 @@ TFT_eSPI tft = TFT_eSPI();                  // TFT instance
 WiFiClient espClient;
 PubSubClient mqtt(espClient);
 bool mqttConnected = false;
+unsigned long lastWiFiReconnectAttempt = 0;
+unsigned long lastMQTTReconnectAttempt = 0;
+const unsigned long WIFI_RECONNECT_INTERVAL = 10000; // 10 seconds
+const unsigned long MQTT_RECONNECT_INTERVAL = 5000;  // 5 seconds
 
 // BLE Scanning
 NimBLEScan* pBLEScan = nullptr;
 bool facultyPresent = false;
 unsigned long lastBLEDetectionTime = 0;
 unsigned long lastBLEScanTime = 0;
+NimBLEAddress targetBLEAddress(TARGET_BLE_ADDRESS); // Pre-create NimBLEAddress for comparison
 
 // Consultation Requests
 #define MAX_REQUESTS 5                       // Maximum number of displayed requests
@@ -123,15 +128,25 @@ void setup() {
 void loop() {
   // Handle WiFi connection
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected. Reconnecting...");
-    setupWiFi();
+    if (millis() - lastWiFiReconnectAttempt > WIFI_RECONNECT_INTERVAL) {
+      lastWiFiReconnectAttempt = millis();
+      Serial.println("WiFi disconnected. Attempting reconnection...");
+      setupWiFi(); // This will now be non-blocking
+    }
   }
   
   // Handle MQTT connection
-  if (!mqtt.connected()) {
-    reconnectMQTT();
+  if (WiFi.status() == WL_CONNECTED && !mqtt.connected()) {
+    if (millis() - lastMQTTReconnectAttempt > MQTT_RECONNECT_INTERVAL) {
+      lastMQTTReconnectAttempt = millis();
+      Serial.println("MQTT disconnected. Attempting reconnection...");
+      reconnectMQTT(); // This will now be non-blocking
+    }
   }
-  mqtt.loop();
+  
+  if (mqtt.connected()) {
+    mqtt.loop();
+  }
   
   // Update BLE status
   updateBLEStatus();
@@ -154,35 +169,15 @@ void setupWiFi() {
   Serial.print("Connecting to WiFi");
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
-  // Show connecting message on display
+  // Show connecting message on display (briefly, as this is non-blocking now)
   tft.fillScreen(TFT_BG);
   tft.setTextColor(TFT_TEXT);
   tft.setTextSize(2);
   tft.setCursor(20, 100);
-  tft.println("Connecting to WiFi...");
+  tft.println("WiFi: Attempting...");
   
-  // Wait for connection with timeout
-  int attemptCount = 0;
-  while (WiFi.status() != WL_CONNECTED && attemptCount < 20) {
-    delay(500);
-    Serial.print(".");
-    attemptCount++;
-  }
-  
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("\nWiFi connected");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println("\nWiFi connection failed!");
-    tft.fillScreen(TFT_BG);
-    tft.setCursor(20, 100);
-    tft.println("WiFi connection failed!");
-    tft.setCursor(20, 130);
-    tft.println("Please check settings");
-    tft.setCursor(20, 160);
-    tft.println("Retrying in 10s...");
-  }
+  // Note: Connection check will happen in the loop
+  lastWiFiReconnectAttempt = millis(); // Reset timer for next check in loop
 }
 
 void setupMQTT() {
@@ -227,17 +222,14 @@ void setupDisplay() {
 // ===== MQTT Functions =====
 void reconnectMQTT() {
   // Attempt to connect to MQTT broker
-  if (!mqtt.connected()) {
-    Serial.print("Connecting to MQTT...");
+  if (!mqtt.connected() && WiFi.status() == WL_CONNECTED) { // Only attempt if WiFi is up
+    Serial.print("Attempting MQTT connection...");
     
-    // Show connecting message on display
-    tft.fillScreen(TFT_BG);
-    tft.setTextColor(TFT_TEXT);
-    tft.setTextSize(2);
-    tft.setCursor(20, 100);
-    tft.println("Connecting to MQTT...");
-    
-    // Connect with credentials if provided
+    // Show connecting message on display (briefly)
+    // Consider a more persistent status icon/message if connection is intermittent
+    // For now, keeping it simple for non-blocking behavior
+    // updateDisplay(); // Refresh display to show status
+
     bool connected = false;
     if (strlen(MQTT_USERNAME) > 0) {
       connected = mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD);
@@ -260,16 +252,18 @@ void reconnectMQTT() {
       // Update display
       updateDisplay();
     } else {
-      Serial.print("failed, rc=");
       Serial.println(mqtt.state());
       mqttConnected = false;
       
-      // Show error on display
-      tft.fillScreen(TFT_BG);
-      tft.setCursor(20, 100);
-      tft.println("MQTT connection failed!");
-      tft.setCursor(20, 130);
-      tft.println("Please check settings");
+      // Show error on display - this might be too quick if non-blocking
+      // Consider a status area on the main display for MQTT/WiFi status
+      // For now, error is logged to Serial.
+      // tft.fillScreen(TFT_BG);
+      // tft.setCursor(20, 100);
+      // tft.println("MQTT connection failed!");
+      // tft.setCursor(20, 130);
+      // tft.println("Please check settings");
+      lastMQTTReconnectAttempt = millis(); // Reset timer for next check in loop
     }
   }
 }
@@ -345,16 +339,11 @@ void scanBLEDevices() {
   bool deviceFound = false;
   for (int i = 0; i < results.getCount(); i++) {
     NimBLEAdvertisedDevice device = results.getDevice(i);
-    String deviceAddress = device.getAddress().toString().c_str();
+    String deviceAddressStr = device.getAddress().toString().c_str(); // Keep for logging if needed
     
-    // Convert addresses to lowercase for comparison
-    String targetAddress = String(TARGET_BLE_ADDRESS);
-    targetAddress.toLowerCase();
-    deviceAddress.toLowerCase();
-    
-    if (deviceAddress.equals(targetAddress)) {
+    if (device.getAddress() == targetBLEAddress) { // Direct comparison of NimBLEAddress objects
       Serial.print("Found target device: ");
-      Serial.print(deviceAddress);
+      Serial.print(deviceAddressStr.c_str()); // Use the string version for printing
       Serial.print(" with RSSI: ");
       Serial.println(device.getRSSI());
       
@@ -430,11 +419,13 @@ void drawStatus() {
   tft.setCursor(20, 50);
   tft.print(facultyPresent ? "AVAILABLE" : "UNAVAILABLE");
   
-  // Draw BLE indicator
+  // Draw WiFi/MQTT status indicator
   tft.setTextColor(TFT_TEXT);
   tft.setTextSize(1);
-  tft.setCursor(tft.width() - 70, 10);
-  tft.print(WiFi.status() == WL_CONNECTED ? "WiFi: ON" : "WiFi: OFF");
+  tft.setCursor(tft.width() - 100, tft.height() - 15); // Position at bottom right
+  String wifiStatus = (WiFi.status() == WL_CONNECTED) ? "WiFi:ON" : "WiFi:OFF";
+  String mqttStatusText = mqttConnected ? "MQTT:ON" : "MQTT:OFF";
+  tft.print(wifiStatus + " " + mqttStatusText);
 }
 
 void drawRequests() {

@@ -1083,9 +1083,6 @@ class RFIDScanDialog(QDialog):
                 # Call the service's simulate method
                 self.rfid_service.simulate_card_read(random_uid)
                 
-                # Also directly call our handler in case the callback isn't working
-                self.handle_rfid_scan(None, random_uid)
-                
                 logger.info(f"Simulation complete, RFID: {random_uid}")
         except Exception as e:
             logger.error(f"Error in RFID simulation: {str(e)}")
