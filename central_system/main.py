@@ -107,10 +107,30 @@ class ConsultEaseApp:
         self.current_student = None
 
         # Start controllers
+        logger.info("Starting RFID controller")
         self.rfid_controller.start()
         self.rfid_controller.register_callback(self.handle_rfid_scan)
 
+        # Verify RFID controller is properly initialized
+        try:
+            from .services import get_rfid_service
+            rfid_service = get_rfid_service()
+            logger.info(f"RFID service initialized: {rfid_service}, simulation mode: {rfid_service.simulation_mode}")
+
+            # Log registered callbacks
+            logger.info(f"RFID service callbacks: {len(rfid_service.callbacks)}")
+            for i, callback in enumerate(rfid_service.callbacks):
+                callback_name = getattr(callback, '__name__', str(callback))
+                logger.info(f"  Callback {i}: {callback_name}")
+        except Exception as e:
+            logger.error(f"Error verifying RFID service: {str(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+
+        logger.info("Starting faculty controller")
         self.faculty_controller.start()
+
+        logger.info("Starting consultation controller")
         self.consultation_controller.start()
 
         # Connect cleanup method
@@ -267,9 +287,14 @@ class ConsultEaseApp:
             student (Student): Verified student or None if not verified
             rfid_uid (str): RFID UID that was scanned
         """
+        logger.info(f"Main.handle_rfid_scan called with student: {student}, rfid_uid: {rfid_uid}")
+
         # If login window is active and visible
         if self.login_window and self.login_window.isVisible():
+            logger.info(f"Forwarding RFID scan to login window: {rfid_uid}")
             self.login_window.handle_rfid_read(rfid_uid, student)
+        else:
+            logger.info(f"Login window not visible, RFID scan not forwarded: {rfid_uid}")
 
     def handle_student_authenticated(self, student):
         """

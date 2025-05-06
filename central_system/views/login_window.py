@@ -15,6 +15,12 @@ class LoginWindow(BaseWindow):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # Set up logging
+        import logging
+        self.logger = logging.getLogger(__name__)
+        self.logger.info("Initializing LoginWindow")
+
         self.init_ui()
 
         # Initialize state variables
@@ -193,6 +199,9 @@ class LoginWindow(BaseWindow):
     def showEvent(self, event):
         """Override showEvent"""
         super().showEvent(event)
+        # Start RFID scanning when the window is shown
+        self.logger.info("LoginWindow shown, starting RFID scanning")
+        self.start_rfid_scanning()
 
     def resizeEvent(self, event):
         """Handle window resize"""
@@ -247,6 +256,8 @@ class LoginWindow(BaseWindow):
             rfid_uid (str): The RFID UID that was read
             student (object, optional): Student object if already validated
         """
+        self.logger.info(f"LoginWindow.handle_rfid_read called with rfid_uid: {rfid_uid}, student: {student}")
+
         # Stop scanning animation
         self.stop_rfid_scanning()
 
@@ -255,34 +266,66 @@ class LoginWindow(BaseWindow):
             try:
                 from ..models import Student, get_db
                 db = get_db()
+
+                # Try exact match first
+                self.logger.info(f"Looking up student with RFID UID: {rfid_uid}")
                 student = db.query(Student).filter(Student.rfid_uid == rfid_uid).first()
 
+                # If no exact match, try case-insensitive match
+                if not student:
+                    self.logger.info(f"No exact match found, trying case-insensitive match for RFID: {rfid_uid}")
+                    # For PostgreSQL
+                    try:
+                        student = db.query(Student).filter(Student.rfid_uid.ilike(rfid_uid)).first()
+                    except:
+                        # For SQLite
+                        student = db.query(Student).filter(Student.rfid_uid.lower() == rfid_uid.lower()).first()
+
                 if student:
-                    import logging
-                    logger = logging.getLogger(__name__)
-                    logger.info(f"LoginWindow: Found student directly: {student.name} with RFID: {rfid_uid}")
+                    self.logger.info(f"LoginWindow: Found student directly: {student.name} with RFID: {rfid_uid}")
+                else:
+                    # Log all students in the database for debugging
+                    all_students = db.query(Student).all()
+                    self.logger.warning(f"No student found for RFID {rfid_uid}")
+                    self.logger.info(f"Available students in database: {len(all_students)}")
+                    for s in all_students:
+                        self.logger.info(f"  - ID: {s.id}, Name: {s.name}, RFID: {s.rfid_uid}")
             except Exception as e:
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.error(f"LoginWindow: Error looking up student: {str(e)}")
+                self.logger.error(f"LoginWindow: Error looking up student: {str(e)}")
+                import traceback
+                self.logger.error(f"Traceback: {traceback.format_exc()}")
 
         if student:
             # Authentication successful
+            self.logger.info(f"Authentication successful for student: {student.name} with ID: {student.id}")
             self.show_success(f"Welcome, {student.name}!")
 
             # Log the emission of the signal
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"LoginWindow: Emitting student_authenticated signal for {student.name}")
+            self.logger.info(f"LoginWindow: Emitting student_authenticated signal for {student.name}")
 
             # Emit the signal to navigate to the dashboard
             self.student_authenticated.emit(student)
 
             # Also emit a change_window signal as a backup
+            self.logger.info(f"LoginWindow: Emitting change_window signal for dashboard")
             self.change_window.emit("dashboard", student)
+
+            # Force a delay to ensure the signals are processed
+            QTimer.singleShot(500, lambda: self._force_dashboard_navigation(student))
         else:
             # Authentication failed
+            self.logger.warning(f"Authentication failed for RFID: {rfid_uid}")
             self.show_error("RFID card not recognized. Please try again or contact an administrator.")
+
+    def _force_dashboard_navigation(self, student):
+        """
+        Force navigation to dashboard as a fallback.
+
+        Args:
+            student (object): Student object
+        """
+        self.logger.info("Forcing dashboard navigation as fallback")
+        self.change_window.emit("dashboard", student)
 
     def show_success(self, message):
         """
@@ -338,19 +381,32 @@ class LoginWindow(BaseWindow):
 
         # Get the RFID service and simulate a card read
         try:
+            # Try to get a real student RFID from the database
+            from ..models import Student, get_db
+            db = get_db()
+            student = db.query(Student).first()
+
+            if student and student.rfid_uid:
+                self.logger.info(f"Simulating RFID scan with real student: {student.name}, RFID: {student.rfid_uid}")
+                rfid_uid = student.rfid_uid
+            else:
+                self.logger.info("No students found in database, using default RFID")
+                rfid_uid = "TESTCARD123"  # Use the test card we added
+
             from ..services import get_rfid_service
             rfid_service = get_rfid_service()
 
             # Simulate a card read - this will trigger the normal authentication flow
             # through the registered callbacks
-            rfid_service.simulate_card_read("SIMULATED")
+            self.logger.info(f"Simulating RFID scan with UID: {rfid_uid}")
+            rfid_service.simulate_card_read(rfid_uid)
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"Error simulating RFID scan: {str(e)}")
+            self.logger.error(f"Error simulating RFID scan: {str(e)}")
+            import traceback
+            self.logger.error(f"Traceback: {traceback.format_exc()}")
 
             # If there's an error, stop the scanning animation and show an error
-            QTimer.singleShot(1000, lambda: self.handle_rfid_read("SIMULATED", None))
+            QTimer.singleShot(1000, lambda: self.handle_rfid_read("TESTCARD123", None))
 
     def handle_manual_rfid_entry(self):
         """
