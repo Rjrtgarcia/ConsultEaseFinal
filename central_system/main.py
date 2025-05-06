@@ -401,9 +401,12 @@ if __name__ == "__main__":
     # Set the theme to light as per the technical context document
     os.environ['CONSULTEASE_THEME'] = 'light'
 
-    # Use SQLite for development/testing
-    os.environ['DB_TYPE'] = 'sqlite'
-    os.environ['DB_PATH'] = 'consultease.db'
+    # Use PostgreSQL for production
+    os.environ['DB_TYPE'] = 'postgresql'
+    os.environ['DB_USER'] = 'piuser'  # Update with your PostgreSQL username
+    os.environ['DB_PASSWORD'] = 'password'  # Update with your PostgreSQL password
+    os.environ['DB_HOST'] = 'localhost'
+    os.environ['DB_NAME'] = 'consultease'
 
     # Check if we're running in fullscreen mode
     fullscreen = os.environ.get('CONSULTEASE_FULLSCREEN', 'false').lower() == 'true'

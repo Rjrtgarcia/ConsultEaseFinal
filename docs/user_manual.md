@@ -230,20 +230,30 @@ As an administrator, you may need to perform system maintenance:
    - Select "System Maintenance" from the admin menu
    - Click "Backup Database"
    - Choose a location to save the backup file
+   - The system supports both PostgreSQL and SQLite database formats
+   - For PostgreSQL (default), the backup will be saved as a .sql file
+   - Regular backups are recommended to prevent data loss
 
 2. **Restore Database**:
    - Select "System Maintenance" from the admin menu
    - Click "Restore Database"
    - Select a previously created backup file
+   - Confirm the restore operation (this will overwrite the current database)
+   - The system will automatically restart after the restore is complete
+   - Note: Always create a backup before performing a restore
 
 3. **System Logs**:
    - Select "System Maintenance" from the admin menu
    - Click "View Logs" to see system activity
    - Use filters to narrow down the log entries
+   - You can clear logs if they become too large
+   - Log files are also stored in the application directory for advanced troubleshooting
 
 4. **System Settings**:
    - Select "System Settings" from the admin menu
    - Configure MQTT settings, database connection, and other parameters
+   - Changes to system settings require a restart to take effect
+   - Default settings are optimized for most deployments
 
 ---
 
@@ -254,23 +264,46 @@ As an administrator, you may need to perform system maintenance:
 #### RFID Card Not Recognized
 - Ensure you are holding the card close to the reader
 - Try scanning the card again, more slowly
+- Try using the manual RFID input option if available
+- If using a 13.56 MHz reader, ensure it's configured correctly
 - If the problem persists, see an administrator to verify your card registration
 
 #### Faculty Status Not Updating
 - Check if the BLE beacon is functioning (LED indicator)
 - Ensure the beacon has sufficient battery power
 - Verify the BLE ID is correctly registered in the system
+- Check if the ESP32 is properly connected to the network
 - Restart the Faculty Desk Unit if necessary
+- Check the MQTT broker status on the server
 
 #### Central System Unresponsive
 - Wait a few moments for the system to respond
 - If the touchscreen remains unresponsive, notify an administrator
+- Press F11 to toggle fullscreen mode if the display is cut off
+- Press F5 to toggle the on-screen keyboard if needed
 - The system may require a restart
+- Check system logs for any error messages
 
 #### Faculty Desk Unit Display Issues
 - Check the power connection
 - Verify WiFi connectivity (indicator on the screen)
 - Restart the unit if necessary
+- Check if the MQTT connection is established
+- Verify the ESP32 is properly configured
+
+#### Database Issues
+- If you can't access student or faculty data, the database may be unavailable
+- Administrators should check if PostgreSQL is running
+- Verify the database credentials in the environment variables
+- Try restoring from a backup if the database is corrupted
+- Regular database backups are recommended to prevent data loss
+
+#### Admin Dashboard Issues
+- If CRUD operations are not working, check database permissions
+- Ensure you're logged in with an admin account
+- Check the system logs for any error messages
+- Try clearing browser cache if using a web interface
+- Restart the application if the dashboard is unresponsive
 
 ### Contact Support
 
@@ -338,10 +371,31 @@ The system uses a PostgreSQL database with the following main tables:
 The Central System requires the following software packages:
 - Python 3.9+
 - PyQt5
-- PostgreSQL
+- PostgreSQL (primary database)
+- SQLite (supported for development)
 - Paho MQTT client
 - SQLAlchemy
 - evdev (for RFID reader)
+- bcrypt (for secure password hashing)
+
+### Security Features
+
+The ConsultEase system includes several security features:
+
+1. **Password Security**:
+   - Admin passwords are hashed using bcrypt, a secure password-hashing function
+   - Password complexity requirements are enforced
+   - Failed login attempts are logged
+
+2. **Database Security**:
+   - Database connections use secure authentication
+   - Sensitive data is properly handled
+   - Regular backups protect against data loss
+
+3. **Input Validation**:
+   - All user inputs are validated to prevent injection attacks
+   - RFID data is sanitized before processing
+   - Form submissions include CSRF protection
 
 ### Backup and Recovery
 
@@ -349,13 +403,30 @@ To backup the system:
 1. Go to the Admin interface
 2. Select "System Maintenance"
 3. Click "Backup Database"
-4. Save the backup file to a secure location
+4. Choose a location to save the backup file
+5. The system will create a backup of the PostgreSQL database
 
 To restore from a backup:
 1. Go to the Admin interface
 2. Select "System Maintenance"
 3. Click "Restore Database"
 4. Select the backup file to restore
+5. Confirm the restore operation
+6. The system will restart automatically after the restore is complete
+
+### Error Handling
+
+The system includes comprehensive error handling:
+
+1. **User-Friendly Messages**:
+   - Clear error messages are displayed to users
+   - Technical details are logged for administrators
+   - Suggestions for resolution are provided when possible
+
+2. **Automatic Recovery**:
+   - The system attempts to recover from common errors
+   - Services automatically reconnect after network interruptions
+   - Database connections are retried with exponential backoff
 
 ### Performance Considerations
 
@@ -367,4 +438,4 @@ For optimal performance:
 
 ---
 
-© 2023 ConsultEase System - All Rights Reserved 
+© 2023 ConsultEase System - All Rights Reserved

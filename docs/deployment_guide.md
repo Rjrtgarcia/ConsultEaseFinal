@@ -151,7 +151,7 @@ This guide provides step-by-step instructions for deploying the complete Consult
    [Unit]
    Description=ConsultEase Central System
    After=network.target postgresql.service mosquitto.service
-   
+
    [Service]
    ExecStart=/usr/bin/python3 /home/pi/ConsultEase/central_system/main.py
    WorkingDirectory=/home/pi/ConsultEase
@@ -159,7 +159,7 @@ This guide provides step-by-step instructions for deploying the complete Consult
    StandardError=inherit
    Restart=always
    User=pi
-   
+
    [Install]
    WantedBy=multi-user.target
    ```
@@ -260,16 +260,16 @@ Configure your router to forward the necessary ports if remote access is require
    ```python
    from central_system.models import Admin, init_db
    from central_system.controllers import AdminController
-   
+
    # Initialize database
    init_db()
-   
+
    # Create admin controller
    admin_controller = AdminController()
-   
+
    # Ensure default admin exists
    admin_controller.ensure_default_admin()
-   
+
    print("Default admin created with username 'admin' and password 'admin123'")
    print("Please change this password immediately!")
    ```
@@ -400,4 +400,151 @@ To test the touch interface and keyboard functionality:
 
 ## Performance Optimization
 
-// ... existing code ... 
+### 1. Database Optimization
+
+For optimal database performance:
+
+1. **PostgreSQL Configuration**:
+   ```bash
+   sudo nano /etc/postgresql/13/main/postgresql.conf
+   ```
+
+   Adjust the following settings based on your Raspberry Pi's resources:
+   ```
+   shared_buffers = 128MB
+   work_mem = 8MB
+   maintenance_work_mem = 64MB
+   effective_cache_size = 512MB
+   ```
+
+2. **Regular Maintenance**:
+   ```bash
+   # Create a maintenance script
+   sudo nano /etc/cron.weekly/consultease-maintenance.sh
+   ```
+
+   Add the following content:
+   ```bash
+   #!/bin/bash
+   echo "Running ConsultEase database maintenance..."
+   sudo -u postgres psql -d consultease -c "VACUUM ANALYZE;"
+   echo "Maintenance complete."
+   ```
+
+   Make it executable:
+   ```bash
+   sudo chmod +x /etc/cron.weekly/consultease-maintenance.sh
+   ```
+
+### 2. Application Optimization
+
+1. **Memory Usage**:
+   - Monitor memory usage with `htop`
+   - If memory usage is high, consider increasing swap space:
+     ```bash
+     sudo dphys-swapfile swapoff
+     sudo nano /etc/dphys-swapfile
+     # Set CONF_SWAPSIZE=1024
+     sudo dphys-swapfile setup
+     sudo dphys-swapfile swapon
+     ```
+
+2. **CPU Usage**:
+   - The application is optimized to use minimal CPU resources
+   - If CPU usage is consistently high, check for background processes
+
+## Recent Improvements
+
+The ConsultEase system has undergone significant improvements to enhance stability, security, and functionality:
+
+### Security Enhancements
+
+1. **Password Security**:
+   - Implemented bcrypt password hashing for admin accounts
+   - Added fallback mechanism for backward compatibility
+   - Improved validation of user input
+
+2. **Database Security**:
+   - Enhanced database connection security
+   - Added proper error handling for database operations
+   - Implemented secure backup and restore functionality
+
+### Functionality Improvements
+
+1. **RFID Service**:
+   - Improved callback management to prevent memory leaks
+   - Enhanced error handling for different card types
+   - Added manual input fallback for RFID scanning
+
+2. **MQTT Communication**:
+   - Added exponential backoff for reconnection attempts
+   - Improved error handling for network disconnections
+   - Enhanced message delivery reliability
+
+3. **Admin Dashboard**:
+   - Fixed CRUD operations for faculty and student management
+   - Added proper resource cleanup to prevent memory leaks
+   - Improved UI consistency and user experience
+
+4. **Database Management**:
+   - Added backup and restore functionality
+   - Implemented proper error handling for database operations
+   - Added default data creation for easier setup
+
+### UI Improvements
+
+1. **Theme Consistency**:
+   - Set the theme to light as specified in the technical context
+   - Improved UI element styling and layout
+   - Enhanced touch interface usability
+
+2. **Error Handling**:
+   - Added informative error messages
+   - Implemented fallback mechanisms for error recovery
+   - Improved logging for debugging
+
+## Maintenance and Updates
+
+### Regular System Updates
+
+It's important to keep the system updated:
+
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Update ConsultEase from repository (if applicable)
+cd /path/to/consultease
+git pull
+```
+
+### Database Backups
+
+Regular database backups are essential:
+
+1. **Automated Backups**:
+   ```bash
+   # Create a backup script
+   sudo nano /etc/cron.daily/consultease-backup.sh
+   ```
+
+   Add the following content:
+   ```bash
+   #!/bin/bash
+   BACKUP_DIR="/home/pi/consultease_backups"
+   mkdir -p $BACKUP_DIR
+   DATE=$(date +%Y-%m-%d)
+   sudo -u postgres pg_dump consultease > $BACKUP_DIR/consultease_$DATE.sql
+   # Keep only the last 7 backups
+   ls -t $BACKUP_DIR/consultease_*.sql | tail -n +8 | xargs rm -f
+   ```
+
+   Make it executable:
+   ```bash
+   sudo chmod +x /etc/cron.daily/consultease-backup.sh
+   ```
+
+2. **Manual Backups**:
+   - Use the admin interface to create manual backups
+   - Store backups in a secure location
+   - Test restore functionality periodically
